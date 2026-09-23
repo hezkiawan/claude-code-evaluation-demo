@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Light theme tokens */
+:root {
+  --color-primary: #0ec83a;
+  --color-default: #475569;
+  --color-muted: #64748b;
+  --color-neutral: #aaabb2;
+  --color-danger: #f44336;
+  --color-online: #07bc0c;
+  --border-color-default: #aaabb24d;
+  --border-color-input: #aaabb2;
+  --background-primary: #ffffff;
+  --background-secondary: #f8fafc;
+  --background-header: #f1f5f9;
+  --color-secondary: rgba(71, 85, 105, 0.3);
+  --color-secondary-light: #e2e8f0;
+  --scrollbar-track-color: rgba(0, 0, 0, 0.05);
+  --scrollbar-thumb-color: rgba(0, 0, 0, 0.3);
+}
+
+/* Dark theme tokens (default for the app shell) */
+.dark {
+  --background-primary: rgb(30, 30, 30);
+  --background-secondary: rgb(44, 44, 44);
+  --background-secondary-transparent: rgba(44, 44, 44, 0.8);
+  --background-header: #292929;
+  --color-default: rgb(255, 255, 255);
+  --color-muted: #c5c4c4;
+  --color-secondary: rgba(197, 196, 196, 0.3);
+  --color-secondary-light: rgb(61, 61, 61);
+  --border-color-input: #525355;
+  --scrollbar-track-color: rgba(255, 255, 255, 0.05);
+  --scrollbar-thumb-color: rgba(255, 255, 255, 0.5);
+  --leaflet-theme: invert(100%) hue-rotate(180deg) brightness(100%) contrast(90%);
+}
+
+*,
+::before,
+::after {
+  box-sizing: border-box;
+  border-width: 0;
+  border-color: var(--border-color-default);
+  outline-color: var(--color-primary);
+}
+
+body {
+  background: var(--background-primary);
+  color: var(--color-default);
+  line-height: 1.5;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-color) var(--scrollbar-track-color);
+}

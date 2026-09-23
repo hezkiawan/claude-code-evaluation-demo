@@ -45,3 +45,6 @@ backend/main
 # ==========================================
 # Keep settings/rules, ignore runtime cache/cost files if created later
 graphify-out/cost.json
+# Playwright MCP output
+.playwright-mcp/
+*.tsbuildinfo
