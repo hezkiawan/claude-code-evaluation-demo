@@ -1,0 +1,47 @@
+# ==========================================
+# SECRETS & CREDENTIALS (NEVER COMMIT)
+# ==========================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+serviceAccountKey.json
+**/serviceAccountKey.json
+credentials.json
+
+# ==========================================
+# DEPENDENCIES & BUILD OUTPUTS
+# ==========================================
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Go Binaries
+backend/main
+*.exe
+*.exe?
+*.dll
+*.so
+*.dylib
+
+# ==========================================
+# IDE & OS FILES
+# ==========================================
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.vscode/
+.idea/
+
+# ==========================================
+# CLAUDE CODE & PLUGIN TEMP DATA
+# ==========================================
+# Keep settings/rules, ignore runtime cache/cost files if created later
+graphify-out/cost.json
