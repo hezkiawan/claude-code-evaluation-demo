@@ -26,6 +26,11 @@ type Room struct {
 	Platform  string    `json:"platform" firestore:"platform"`
 	Status    string    `json:"status" firestore:"status"`
 	CreatedAt time.Time `json:"createdAt" firestore:"createdAt"`
+
+	AssignedAt  *time.Time `json:"assignedAt,omitempty" firestore:"assignedAt,omitempty"`
+	SLABreached bool       `json:"slaBreached" firestore:"slaBreached"`
+	// Expired is computed per request: an idle/bot room waiting past AssignSLA.
+	Expired bool `json:"expired" firestore:"-"`
 }
 
 type createRoomRequest struct {
@@ -34,11 +39,13 @@ type createRoomRequest struct {
 }
 
 type RoomHandler struct {
-	fs *firestore.Client
+	fs       *firestore.Client
+	assigner roomAssigner
+	now      func() time.Time
 }
 
 func NewRoomHandler(fs *firestore.Client) *RoomHandler {
-	return &RoomHandler{fs: fs}
+	return &RoomHandler{fs: fs, assigner: firestoreAssigner{fs: fs}, now: time.Now}
 }
 
 // Create handles POST /api/rooms.
@@ -88,6 +95,7 @@ func (h *RoomHandler) List(w http.ResponseWriter, r *http.Request) {
 		q = q.Where("status", "==", status)
 	}
 
+	now := h.now().UTC()
 	rooms := make([]Room, 0)
 	iter := q.Documents(r.Context())
 	defer iter.Stop()
@@ -110,7 +118,7 @@ func (h *RoomHandler) List(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		room.ID = doc.Ref.ID
-		rooms = append(rooms, room)
+		rooms = append(rooms, withSLAStatus(room, now))
 	}
 
 	// Sorted in memory so no composite index is needed.
