@@ -8,6 +8,9 @@ export interface Room {
   platform: Platform;
   status: RoomStatus;
   createdAt: string; // ISO timestamp from the Go API
+  assignedAt?: string; // ISO timestamp, set once assigned
+  slaBreached: boolean; // assigned after waiting past the 5-minute SLA
+  expired: boolean; // server-computed: idle/bot room waiting past the SLA
 }
 
 export type MessageDirection = "inbound" | "outbound";
