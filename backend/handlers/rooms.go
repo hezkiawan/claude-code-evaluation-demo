@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"sort"
@@ -10,9 +12,15 @@ import (
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const roomsCollection = "rooms"
+
+// SLAWindow is how long a customer may wait for an agent before the room
+// counts as expired.
+const SLAWindow = 5 * time.Minute
 
 var (
 	validPlatforms = map[string]bool{"whatsapp": true, "livechat": true}
@@ -26,6 +34,17 @@ type Room struct {
 	Platform  string    `json:"platform" firestore:"platform"`
 	Status    string    `json:"status" firestore:"status"`
 	CreatedAt time.Time `json:"createdAt" firestore:"createdAt"`
+	// AssignedAt is set once, when an agent picks up the room.
+	AssignedAt *time.Time `json:"assignedAt,omitempty" firestore:"assignedAt,omitempty"`
+	// SLABreached records whether the customer waited longer than SLAWindow
+	// before the room was assigned.
+	SLABreached bool `json:"slaBreached" firestore:"slaBreached"`
+}
+
+// SLAExpired reports whether a room created at createdAt has waited longer
+// than SLAWindow as of now.
+func SLAExpired(createdAt, now time.Time) bool {
+	return now.Sub(createdAt) > SLAWindow
 }
 
 type createRoomRequest struct {
@@ -72,6 +91,66 @@ func (h *RoomHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	room.ID = ref.ID
 	WriteJSON(w, http.StatusCreated, room)
+}
+
+var (
+	errRoomNotFound    = errors.New("room not found")
+	errRoomUnavailable = errors.New("room is already assigned or closed")
+)
+
+// Assign handles POST /api/rooms/{id}/assign. It moves an idle or bot room to
+// "assigned" and records whether the 5-minute SLA was breached. Assignment is
+// still allowed after the SLA expires: an overdue customer needs an agent most.
+func (h *RoomHandler) Assign(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "room id is required")
+		return
+	}
+
+	ref := h.fs.Collection(roomsCollection).Doc(id)
+	var room Room
+	// Transaction so two agents cannot both claim the same room.
+	err := h.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
+		doc, err := tx.Get(ref)
+		if status.Code(err) == codes.NotFound {
+			return errRoomNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if err := doc.DataTo(&room); err != nil {
+			return err
+		}
+		if room.Status == "assigned" || room.Status == "closed" {
+			return errRoomUnavailable
+		}
+
+		now := time.Now().UTC()
+		room.Status = "assigned"
+		room.AssignedAt = &now
+		room.SLABreached = SLAExpired(room.CreatedAt, now)
+		return tx.Update(ref, []firestore.Update{
+			{Path: "status", Value: room.Status},
+			{Path: "assignedAt", Value: now},
+			{Path: "slaBreached", Value: room.SLABreached},
+		})
+	})
+	switch {
+	case errors.Is(err, errRoomNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	case errors.Is(err, errRoomUnavailable):
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	case err != nil:
+		log.Printf("assign room %s: %v", id, err)
+		writeError(w, http.StatusInternalServerError, "failed to assign room")
+		return
+	}
+
+	room.ID = id
+	WriteJSON(w, http.StatusOK, room)
 }
 
 // List handles GET /api/rooms. Without a query it returns every non-closed

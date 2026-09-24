@@ -8,6 +8,8 @@ export interface Room {
   platform: Platform;
   status: RoomStatus;
   createdAt: string; // ISO timestamp from the Go API
+  assignedAt?: string; // set once an agent picks up the room
+  slaBreached: boolean; // waited past the SLA before being assigned
 }
 
 export type MessageDirection = "inbound" | "outbound";

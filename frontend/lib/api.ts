@@ -25,6 +25,10 @@ export function createRoom(customerName: string, platform: Platform): Promise<Ro
   });
 }
 
+export function assignRoom(id: string): Promise<Room> {
+  return request<Room>(`/api/rooms/${encodeURIComponent(id)}/assign`, { method: "POST" });
+}
+
 export async function checkHealth(): Promise<boolean> {
   try {
     await request<{ status: string }>("/api/health");

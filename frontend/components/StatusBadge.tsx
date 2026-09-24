@@ -8,10 +8,12 @@ const styles: Record<RoomStatus, string> = {
   closed: "bg-danger",
 };
 
+const pill = "rounded px-2 py-0.5 text-sm leading-tight text-white";
+
 export default function StatusBadge({ status }: { status: RoomStatus }) {
-  return (
-    <span className={`rounded px-2 py-0.5 text-sm capitalize leading-tight text-white ${styles[status]}`}>
-      {status}
-    </span>
-  );
+  return <span className={`${pill} capitalize ${styles[status]}`}>{status}</span>;
+}
+
+export function ExpiredBadge() {
+  return <span className={`${pill} bg-danger`}>Expired</span>;
 }

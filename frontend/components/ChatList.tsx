@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { createRoom, fetchRooms } from "@/lib/api";
-import { relativeTime } from "@/lib/format";
+import { assignRoom, createRoom, fetchRooms } from "@/lib/api";
+import { isSlaExpired, relativeTime } from "@/lib/format";
 import type { Platform, PlatformFilter, Room, RoomStatus } from "@/lib/types";
 import Avatar from "./Avatar";
 import PlatformTag from "./PlatformTag";
-import StatusBadge from "./StatusBadge";
+import StatusBadge, { ExpiredBadge } from "./StatusBadge";
 import Tabs from "./Tabs";
 import { PlusIcon } from "./icons";
 
@@ -53,9 +53,9 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
     load(status);
   }, [status, load]);
 
-  // Keep relative timestamps fresh.
+  // Keep relative timestamps and SLA expiry fresh.
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60_000);
+    const id = setInterval(() => setNow(new Date()), 15_000);
     return () => clearInterval(id);
   }, []);
 
@@ -68,6 +68,14 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
     if (status === room.status) setRooms((prev) => [room, ...prev]);
     else setStatus(room.status);
     onSelect(room);
+  };
+
+  // The room now belongs in the Assigned tab, so drop it from any other list.
+  const handleAssigned = (room: Room) => {
+    setRooms((prev) =>
+      status === room.status ? prev.map((r) => (r.id === room.id ? room : r)) : prev.filter((r) => r.id !== room.id),
+    );
+    if (room.id === selectedRoomId) onSelect(room);
   };
 
   return (
@@ -88,6 +96,7 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
                 now={now}
                 selected={room.id === selectedRoomId}
                 onClick={() => onSelect(room)}
+                onAssigned={handleAssigned}
               />
             </li>
           ))}
@@ -96,32 +105,75 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
   );
 }
 
-function ChatTile({ room, now, selected, onClick }: { room: Room; now: Date; selected: boolean; onClick: () => void }) {
+interface ChatTileProps {
+  room: Room;
+  now: Date;
+  selected: boolean;
+  onClick: () => void;
+  onAssigned: (room: Room) => void;
+}
+
+function ChatTile({ room, now, selected, onClick, onAssigned }: ChatTileProps) {
+  const [assigning, setAssigning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const canAssign = room.status === "idle" || room.status === "bot";
+
+  const assign = async () => {
+    setAssigning(true);
+    setError(null);
+    try {
+      onAssigned(await assignRoom(room.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to assign room");
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  // Buttons can't nest, so Assign is a sibling overlaid on the bottom row.
   return (
-    <button
-      onClick={onClick}
-      aria-current={selected ? "true" : undefined}
-      className={`flex w-full gap-4 rounded-lg p-4 text-left transition-colors ${
-        selected ? "bg-raised" : "hover:bg-raised"
-      }`}
-    >
-      <Avatar name={room.name} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-lg font-medium text-default">{room.name}</span>
-          <time dateTime={room.createdAt} className="shrink-0 text-sm text-muted">
-            {relativeTime(new Date(room.createdAt), now)}
-          </time>
+    <div className={`relative rounded-lg transition-colors ${selected ? "bg-raised" : "hover:bg-raised"}`}>
+      <button
+        onClick={onClick}
+        aria-current={selected ? "true" : undefined}
+        className="flex w-full gap-4 p-4 text-left"
+      >
+        <Avatar name={room.name} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-lg font-medium text-default">{room.name}</span>
+            <time dateTime={room.createdAt} className="shrink-0 text-sm text-muted">
+              {relativeTime(new Date(room.createdAt), now)}
+            </time>
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-2 border-b border-raised pb-2">
+            <span className="truncate text-sm text-muted">Customer conversation</span>
+            <span className="flex shrink-0 gap-1">
+              {isSlaExpired(room, now) && <ExpiredBadge />}
+              <StatusBadge status={room.status} />
+            </span>
+          </div>
+          <div className={`mt-2 flex min-h-7 items-center gap-2 ${canAssign ? "pr-24" : ""}`}>
+            <PlatformTag platform={room.platform} />
+            {error && (
+              <span role="alert" title={error} className="truncate text-sm text-danger">
+                {error}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="mt-1 flex items-center justify-between gap-2 border-b border-raised pb-2">
-          <span className="truncate text-sm text-muted">Customer conversation</span>
-          <StatusBadge status={room.status} />
-        </div>
-        <div className="mt-2">
-          <PlatformTag platform={room.platform} />
-        </div>
-      </div>
-    </button>
+      </button>
+      {canAssign && (
+        <button
+          onClick={assign}
+          disabled={assigning}
+          aria-label={`Assign ${room.name}`}
+          className="absolute bottom-4 right-4 h-7 rounded bg-primary px-3 text-sm text-white disabled:opacity-50"
+        >
+          {assigning ? "Assigning…" : "Assign"}
+        </button>
+      )}
+    </div>
   );
 }
 
