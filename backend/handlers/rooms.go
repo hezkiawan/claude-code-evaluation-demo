@@ -153,6 +153,19 @@ func (h *RoomHandler) Assign(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, room)
 }
 
+// Exists reports whether a room document with the given id exists.
+func (h *RoomHandler) Exists(ctx context.Context, id string) (bool, error) {
+	ref := h.fs.Collection(roomsCollection).Doc(id)
+	if ref == nil { // id is not a valid document id (e.g. contains "/")
+		return false, nil
+	}
+	_, err := ref.Get(ctx)
+	if status.Code(err) == codes.NotFound {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // List handles GET /api/rooms. Without a query it returns every non-closed
 // room; `?status=<assigned|idle|bot|closed>` narrows to one status.
 func (h *RoomHandler) List(w http.ResponseWriter, r *http.Request) {

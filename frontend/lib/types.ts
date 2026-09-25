@@ -12,6 +12,17 @@ export interface Room {
   slaBreached: boolean; // waited past the SLA before being assigned
 }
 
+// Mirrors MaxNoteLength in backend/handlers/notes.go.
+export const MAX_NOTE_LENGTH = 500;
+
+export interface Note {
+  id: string; // Firestore document id under rooms/{roomId}/notes
+  roomId: string;
+  content: string;
+  isImportant: boolean;
+  createdAt: string; // ISO timestamp from the Go API
+}
+
 export type MessageDirection = "inbound" | "outbound";
 
 export interface Message {

@@ -6,10 +6,22 @@ import { db } from "@/lib/firebase";
 import { clockTime } from "@/lib/format";
 import type { Message, MessageDirection, Room } from "@/lib/types";
 import Avatar from "./Avatar";
+import NotesPanel from "./NotesPanel";
 import PlatformTag from "./PlatformTag";
+import Tabs from "./Tabs";
 import { ChatIcon, SendIcon } from "./icons";
 
+type View = "chat" | "notes";
+
+const VIEW_TABS = [
+  { value: "chat", label: "Chat" },
+  { value: "notes", label: "Notes" },
+] as const;
+
 export default function ChatWindow({ room }: { room: Room | null }) {
+  // Lives above RoomChat so the chosen tab survives switching rooms.
+  const [view, setView] = useState<View>("chat");
+
   if (!room) {
     return (
       <section className="flex flex-1 flex-col items-center justify-center gap-3 bg-raised text-muted">
@@ -19,10 +31,10 @@ export default function ChatWindow({ room }: { room: Room | null }) {
     );
   }
   // Keyed so message state resets cleanly when switching rooms.
-  return <RoomChat key={room.id} room={room} />;
+  return <RoomChat key={room.id} room={room} view={view} onViewChange={setView} />;
 }
 
-function RoomChat({ room }: { room: Room }) {
+function RoomChat({ room, view, onViewChange }: { room: Room; view: View; onViewChange: (v: View) => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -52,7 +64,7 @@ function RoomChat({ room }: { room: Room }) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [messages.length, view]);
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
@@ -68,18 +80,25 @@ function RoomChat({ room }: { room: Room }) {
         </div>
       </header>
 
-      <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
-        {error && <p className="text-center text-sm text-danger">{error}</p>}
-        {!error && messages.length === 0 && (
-          <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
-        )}
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
-        <div ref={bottomRef} />
+      <Tabs tabs={VIEW_TABS} active={view} onChange={onViewChange} className="px-2" />
+
+      {/* Hidden rather than unmounted so the composer keeps its draft. */}
+      <div className={view === "chat" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+        <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
+          {error && <p className="text-center text-sm text-danger">{error}</p>}
+          {!error && messages.length === 0 && (
+            <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
+          )}
+          {messages.map((m) => (
+            <MessageBubble key={m.id} message={m} />
+          ))}
+          <div ref={bottomRef} />
+        </div>
+
+        <Composer roomId={room.id} />
       </div>
 
-      <Composer roomId={room.id} />
+      {view === "notes" && <NotesPanel roomId={room.id} />}
     </section>
   );
 }
