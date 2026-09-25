@@ -21,3 +21,10 @@ export interface Message {
   direction: MessageDirection;
   createdAt: Date | null;
 }
+
+export interface Note {
+  id: string;
+  content: string; // trimmed, max 500 characters
+  isImportant: boolean;
+  createdAt: string; // ISO timestamp from the Go API
+}

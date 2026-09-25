@@ -88,3 +88,9 @@ export const LivechatIcon = (p: IconProps) => (
     <path d="M4 5h16v11H9l-5 4Z" />
   </svg>
 );
+
+export const StarIcon = (p: IconProps) => (
+  <svg {...base} fill="currentColor" {...p}>
+    <path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8-6.2-3.2-6.2 3.2L7 14.2 2 9.3l6.9-1Z" />
+  </svg>
+);

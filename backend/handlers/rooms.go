@@ -41,11 +41,17 @@ type createRoomRequest struct {
 type RoomHandler struct {
 	fs       *firestore.Client
 	assigner roomAssigner
+	notes    noteStore
 	now      func() time.Time
 }
 
 func NewRoomHandler(fs *firestore.Client) *RoomHandler {
-	return &RoomHandler{fs: fs, assigner: firestoreAssigner{fs: fs}, now: time.Now}
+	return &RoomHandler{
+		fs:       fs,
+		assigner: firestoreAssigner{fs: fs},
+		notes:    firestoreNoteStore{fs: fs},
+		now:      time.Now,
+	}
 }
 
 // Create handles POST /api/rooms.

@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { assignRoom } from "./api";
-import type { Room } from "./types";
+import { assignRoom, createNote, fetchNotes } from "./api";
+import type { Note, Room } from "./types";
 
 const fetchMock = vi.fn<typeof fetch>();
 vi.stubGlobal("fetch", fetchMock);
@@ -45,5 +45,38 @@ describe("assignRoom", () => {
     fetchMock.mockResolvedValue(json({ error: "room is already assigned" }, 409));
 
     await expect(assignRoom("r1")).rejects.toThrow("room is already assigned");
+  });
+});
+
+describe("notes API", () => {
+  const note: Note = { id: "n1", content: "VIP", isImportant: true, createdAt: "2026-09-24T10:00:00.000Z" };
+
+  beforeEach(() => fetchMock.mockReset());
+
+  it("fetchNotes GETs /api/rooms/:id/notes with an encoded id", async () => {
+    fetchMock.mockResolvedValue(json([note]));
+
+    await expect(fetchNotes("a/b")).resolves.toEqual([note]);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/api\/rooms\/a%2Fb\/notes$/);
+    expect(init?.method ?? "GET").toBe("GET");
+  });
+
+  it("createNote POSTs content and isImportant", async () => {
+    fetchMock.mockResolvedValue(json(note, 201));
+
+    await expect(createNote("r1", "VIP", true)).resolves.toEqual(note);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/api\/rooms\/r1\/notes$/);
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({ content: "VIP", isImportant: true });
+  });
+
+  it("createNote surfaces validation errors from the server", async () => {
+    fetchMock.mockResolvedValue(json({ error: "content is required" }, 400));
+
+    await expect(createNote("r1", "", false)).rejects.toThrow("content is required");
   });
 });

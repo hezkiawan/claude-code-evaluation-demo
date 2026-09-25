@@ -6,7 +6,9 @@ import { db } from "@/lib/firebase";
 import { clockTime } from "@/lib/format";
 import type { Message, MessageDirection, Room } from "@/lib/types";
 import Avatar from "./Avatar";
+import NotesPanel from "./NotesPanel";
 import PlatformTag from "./PlatformTag";
+import Tabs from "./Tabs";
 import { ChatIcon, SendIcon } from "./icons";
 
 export default function ChatWindow({ room }: { room: Room | null }) {
@@ -22,9 +24,16 @@ export default function ChatWindow({ room }: { room: Room | null }) {
   return <RoomChat key={room.id} room={room} />;
 }
 
+const ROOM_VIEWS = [
+  { value: "chat", label: "Chat" },
+  { value: "notes", label: "Notes" },
+] as const;
+type RoomView = (typeof ROOM_VIEWS)[number]["value"];
+
 function RoomChat({ room }: { room: Room }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<RoomView>("chat");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,7 +65,7 @@ function RoomChat({ room }: { room: Room }) {
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
-      <header className="flex items-center gap-4 border-b border-raised bg-panel px-6 py-4">
+      <header className="flex items-center gap-4 bg-panel px-6 py-4">
         <Avatar name={room.name} size="md" />
         <div className="min-w-0">
           <h2 className="truncate text-lg text-default">{room.name}</h2>
@@ -67,19 +76,34 @@ function RoomChat({ room }: { room: Room }) {
           </div>
         </div>
       </header>
+      <Tabs tabs={ROOM_VIEWS} active={view} onChange={setView} className="px-2" />
 
-      <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
-        {error && <p className="text-center text-sm text-danger">{error}</p>}
-        {!error && messages.length === 0 && (
-          <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
-        )}
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
-        <div ref={bottomRef} />
+      {/* Chat stays mounted while Notes is open so the live feed and any draft survive. */}
+      <div
+        role="tabpanel"
+        aria-label="Chat"
+        hidden={view !== "chat"}
+        className={`min-h-0 flex-1 flex-col ${view === "chat" ? "flex" : "hidden"}`}
+      >
+        <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
+          {error && <p className="text-center text-sm text-danger">{error}</p>}
+          {!error && messages.length === 0 && (
+            <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
+          )}
+          {messages.map((m) => (
+            <MessageBubble key={m.id} message={m} />
+          ))}
+          <div ref={bottomRef} />
+        </div>
+
+        <Composer roomId={room.id} />
       </div>
 
-      <Composer roomId={room.id} />
+      {view === "notes" && (
+        <div role="tabpanel" aria-label="Notes" className="flex min-h-0 flex-1 flex-col">
+          <NotesPanel roomId={room.id} />
+        </div>
+      )}
     </section>
   );
 }
