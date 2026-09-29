@@ -48,3 +48,9 @@ graphify-out/cost.json
 # Playwright MCP output
 .playwright-mcp/
 *.tsbuildinfo
+
+# ==========================================
+# TEST & TOOL OUTPUT (evaluation)
+# ==========================================
+coverage/
+graphify-out/
