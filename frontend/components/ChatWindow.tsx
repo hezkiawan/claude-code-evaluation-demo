@@ -6,7 +6,9 @@ import { db } from "@/lib/firebase";
 import { clockTime } from "@/lib/format";
 import type { Message, MessageDirection, Room } from "@/lib/types";
 import Avatar from "./Avatar";
+import NotesPanel from "./NotesPanel";
 import PlatformTag from "./PlatformTag";
+import Tabs from "./Tabs";
 import { ChatIcon, SendIcon } from "./icons";
 
 export default function ChatWindow({ room }: { room: Room | null }) {
@@ -22,7 +24,15 @@ export default function ChatWindow({ room }: { room: Room | null }) {
   return <RoomChat key={room.id} room={room} />;
 }
 
+const ROOM_TABS = [
+  { value: "chat", label: "Chat" },
+  { value: "notes", label: "Notes" },
+] as const;
+
+type RoomTab = (typeof ROOM_TABS)[number]["value"];
+
 function RoomChat({ room }: { room: Room }) {
+  const [tab, setTab] = useState<RoomTab>("chat");
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -52,7 +62,7 @@ function RoomChat({ room }: { room: Room }) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [messages.length, tab]);
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
@@ -68,18 +78,26 @@ function RoomChat({ room }: { room: Room }) {
         </div>
       </header>
 
-      <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
-        {error && <p className="text-center text-sm text-danger">{error}</p>}
-        {!error && messages.length === 0 && (
-          <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
-        )}
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
-        <div ref={bottomRef} />
-      </div>
+      <Tabs tabs={ROOM_TABS} active={tab} onChange={setTab} className="px-2" />
 
-      <Composer roomId={room.id} />
+      {tab === "notes" ? (
+        <NotesPanel roomId={room.id} />
+      ) : (
+        <>
+          <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
+            {error && <p className="text-center text-sm text-danger">{error}</p>}
+            {!error && messages.length === 0 && (
+              <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
+            )}
+            {messages.map((m) => (
+              <MessageBubble key={m.id} message={m} />
+            ))}
+            <div ref={bottomRef} />
+          </div>
+
+          <Composer roomId={room.id} />
+        </>
+      )}
     </section>
   );
 }

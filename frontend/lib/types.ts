@@ -18,3 +18,10 @@ export interface Message {
   direction: MessageDirection;
   createdAt: Date | null;
 }
+
+export interface Note {
+  id: string;
+  content: string;
+  isImportant: boolean;
+  createdAt: string; // ISO timestamp from the Go API
+}
