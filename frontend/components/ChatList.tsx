@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { createRoom, fetchRooms } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { CURRENT_AGENT } from "@/lib/agent";
+import { claimRoom, createRoom, fetchRooms } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 import type { Platform, PlatformFilter, Room, RoomStatus } from "@/lib/types";
 import Avatar from "./Avatar";
@@ -23,6 +24,12 @@ const STATUS_TABS = [
   { value: "closed", label: "Closed" },
 ] as const satisfies readonly { value: RoomStatus; label: string }[];
 
+interface ClaimFailure {
+  roomId: string;
+  roomName: string;
+  message: string;
+}
+
 interface ChatListProps {
   selectedRoomId: string | null;
   onSelect: (room: Room) => void;
@@ -35,19 +42,30 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [claimingIds, setClaimingIds] = useState<ReadonlySet<string>>(new Set());
+  const [claimFailure, setClaimFailure] = useState<ClaimFailure | null>(null);
 
+  // Only the most recent load may update the list, so a slow response for a
+  // tab the user has left can't overwrite the current tab.
+  const latestLoad = useRef(0);
   const load = useCallback(async (s: RoomStatus) => {
+    const id = ++latestLoad.current;
     setLoading(true);
     setError(null);
     try {
-      setRooms(await fetchRooms(s));
+      const result = await fetchRooms(s);
+      if (id === latestLoad.current) setRooms(result);
     } catch (err) {
+      if (id !== latestLoad.current) return;
       setRooms([]);
       setError(err instanceof Error ? err.message : "Failed to load rooms");
     } finally {
-      setLoading(false);
+      if (id === latestLoad.current) setLoading(false);
     }
   }, []);
+
+  const statusRef = useRef(status);
+  statusRef.current = status;
 
   useEffect(() => {
     load(status);
@@ -70,13 +88,48 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
     onSelect(room);
   };
 
+  const changeStatus = (s: RoomStatus) => {
+    setClaimFailure(null);
+    setStatus(s);
+  };
+
+  const handleClaim = async (room: Room) => {
+    setClaimingIds((prev) => new Set(prev).add(room.id));
+    setClaimFailure(null);
+    try {
+      const claimed = await claimRoom(room.id, CURRENT_AGENT);
+      setStatus(claimed.status);
+      onSelect(claimed);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to claim room";
+      setClaimFailure({ roomId: room.id, roomName: room.name, message });
+      load(statusRef.current);
+    } finally {
+      setClaimingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(room.id);
+        return next;
+      });
+    }
+  };
+
+  // A failed claim is shown on its tile; if the reload dropped the room
+  // (e.g. someone else claimed it), show it above the list instead.
+  const orphanedFailure =
+    !loading && claimFailure && !visible.some((r) => r.id === claimFailure.roomId) ? claimFailure : null;
+
   return (
     <aside className="flex w-[380px] shrink-0 flex-col border-r border-raised bg-panel">
       <Tabs tabs={PLATFORM_TABS} active={platform} onChange={setPlatform} />
       <NewRoomForm onCreated={handleCreated} />
-      <Tabs tabs={STATUS_TABS} active={status} onChange={setStatus} className="justify-between px-2" />
+      <Tabs tabs={STATUS_TABS} active={status} onChange={changeStatus} className="justify-between px-2" />
 
       <ul className="flex-1 space-y-1 overflow-y-auto p-3">
+        {orphanedFailure && (
+          <ListNote tone="error">
+            {orphanedFailure.roomName}: {orphanedFailure.message}
+          </ListNote>
+        )}
         {loading && <ListNote>Loading…</ListNote>}
         {!loading && error && <ListNote tone="error">{error}</ListNote>}
         {!loading && !error && visible.length === 0 && <ListNote>No {status} chats</ListNote>}
@@ -87,7 +140,10 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
                 room={room}
                 now={now}
                 selected={room.id === selectedRoomId}
-                onClick={() => onSelect(room)}
+                onSelect={() => onSelect(room)}
+                onClaim={() => handleClaim(room)}
+                claiming={claimingIds.has(room.id)}
+                claimError={claimFailure?.roomId === room.id ? claimFailure.message : null}
               />
             </li>
           ))}
@@ -96,33 +152,75 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
   );
 }
 
-function ChatTile({ room, now, selected, onClick }: { room: Room; now: Date; selected: boolean; onClick: () => void }) {
+interface ChatTileProps {
+  room: Room;
+  now: Date;
+  selected: boolean;
+  onSelect: () => void;
+  onClaim: () => void;
+  claiming: boolean;
+  claimError: string | null;
+}
+
+// The select action and the Claim button are siblings so interactive
+// elements never nest; Claim is overlaid on the tile's channel row.
+function ChatTile({ room, now, selected, onSelect, onClaim, claiming, claimError }: ChatTileProps) {
+  const claimable = isUnassigned(room.status);
+
   return (
-    <button
-      onClick={onClick}
-      aria-current={selected ? "true" : undefined}
-      className={`flex w-full gap-4 rounded-lg p-4 text-left transition-colors ${
-        selected ? "bg-raised" : "hover:bg-raised"
-      }`}
-    >
-      <Avatar name={room.name} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-lg font-medium text-default">{room.name}</span>
-          <time dateTime={room.createdAt} className="shrink-0 text-sm text-muted">
-            {relativeTime(new Date(room.createdAt), now)}
-          </time>
-        </div>
-        <div className="mt-1 flex items-center justify-between gap-2 border-b border-raised pb-2">
-          <span className="truncate text-sm text-muted">Customer conversation</span>
-          <StatusBadge status={room.status} />
-        </div>
-        <div className="mt-2">
-          <PlatformTag platform={room.platform} />
-        </div>
+    <div className={`rounded-lg transition-colors ${selected ? "bg-raised" : "hover:bg-raised"}`}>
+      <div className="relative">
+        <button
+          onClick={onSelect}
+          aria-current={selected ? "true" : undefined}
+          className="flex w-full gap-4 rounded-lg p-4 text-left"
+        >
+          <Avatar name={room.name} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="truncate text-lg font-medium text-default">{room.name}</span>
+              <time dateTime={room.createdAt} className="shrink-0 text-sm text-muted">
+                {relativeTime(new Date(room.createdAt), now)}
+              </time>
+            </div>
+            <div className="mt-1 flex items-center justify-between gap-2 border-b border-raised pb-2">
+              <span className="truncate text-sm text-muted">
+                {room.status === "assigned" && room.assignedAgent
+                  ? `Assigned to ${room.assignedAgent}`
+                  : "Customer conversation"}
+              </span>
+              <StatusBadge status={room.status} />
+            </div>
+            <div className={`mt-2 ${claimable ? "pr-20" : ""}`}>
+              <PlatformTag platform={room.platform} />
+            </div>
+          </div>
+        </button>
+        {claimable && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClaim();
+            }}
+            disabled={claiming}
+            className="absolute bottom-3 right-4 rounded bg-primary px-3 py-1 text-sm font-medium text-white disabled:opacity-50"
+          >
+            Claim
+          </button>
+        )}
       </div>
-    </button>
+      {claimError && (
+        <p role="alert" className="px-4 pb-3 text-sm text-danger">
+          {claimError}
+        </p>
+      )}
+    </div>
   );
+}
+
+function isUnassigned(status: RoomStatus): boolean {
+  return status === "idle" || status === "bot";
 }
 
 function ListNote({ children, tone = "muted" }: { children: React.ReactNode; tone?: "muted" | "error" }) {

@@ -44,6 +44,7 @@ func main() {
 	})
 	mux.HandleFunc("GET /api/rooms", rooms.List)
 	mux.HandleFunc("POST /api/rooms", rooms.Create)
+	mux.HandleFunc("POST /api/rooms/{id}/claim", rooms.Claim)
 
 	addr := os.Getenv("PORT")
 	if addr == "" {

@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"sort"
@@ -10,6 +12,8 @@ import (
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 const roomsCollection = "rooms"
@@ -26,6 +30,10 @@ type Room struct {
 	Platform  string    `json:"platform" firestore:"platform"`
 	Status    string    `json:"status" firestore:"status"`
 	CreatedAt time.Time `json:"createdAt" firestore:"createdAt"`
+
+	// Claim fields; absent until an agent claims the room.
+	AssignedAgent string     `json:"assignedAgent,omitempty" firestore:"assignedAgent,omitempty"`
+	ClaimedAt     *time.Time `json:"claimedAt,omitempty" firestore:"claimedAt,omitempty"`
 }
 
 type createRoomRequest struct {
@@ -48,8 +56,8 @@ func (h *RoomHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	req.CustomerName = strings.TrimSpace(req.CustomerName)
-	if req.CustomerName == "" || len(req.CustomerName) > 100 {
+	var ok bool
+	if req.CustomerName, ok = validName(req.CustomerName); !ok {
 		writeError(w, http.StatusBadRequest, "customerName is required (max 100 chars)")
 		return
 	}
@@ -72,6 +80,62 @@ func (h *RoomHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	room.ID = ref.ID
 	WriteJSON(w, http.StatusCreated, room)
+}
+
+type claimRoomRequest struct {
+	AgentName string `json:"agentName"`
+}
+
+// Claim handles POST /api/rooms/{id}/claim. The read, the ClaimRoom decision
+// and the write run in one transaction so concurrent claims can't both win.
+func (h *RoomHandler) Claim(w http.ResponseWriter, r *http.Request) {
+	var req claimRoomRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	ref := h.fs.Collection(roomsCollection).Doc(r.PathValue("id"))
+	var claimed Room
+	err := h.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
+		var current *Room
+		snap, err := tx.Get(ref)
+		switch {
+		case grpcstatus.Code(err) == codes.NotFound:
+		case err != nil:
+			return err
+		default:
+			current = &Room{}
+			if err := snap.DataTo(current); err != nil {
+				return err
+			}
+			current.ID = ref.ID
+		}
+
+		claimed, err = ClaimRoom(current, req.AgentName, time.Now())
+		if err != nil {
+			return err
+		}
+		return tx.Update(ref, []firestore.Update{
+			{Path: "status", Value: claimed.Status},
+			{Path: "assignedAgent", Value: claimed.AssignedAgent},
+			{Path: "claimedAt", Value: *claimed.ClaimedAt},
+		})
+	})
+
+	switch {
+	case err == nil:
+		WriteJSON(w, http.StatusOK, claimed)
+	case errors.Is(err, ErrInvalidAgentName):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ErrRoomNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, ErrAlreadyClaimed), errors.Is(err, ErrRoomClosed):
+		writeError(w, http.StatusConflict, err.Error())
+	default:
+		log.Printf("claim room %s: %v", ref.ID, err)
+		writeError(w, http.StatusInternalServerError, "failed to claim room")
+	}
 }
 
 // List handles GET /api/rooms. Without a query it returns every non-closed
@@ -116,6 +180,15 @@ func (h *RoomHandler) List(w http.ResponseWriter, r *http.Request) {
 	// Sorted in memory so no composite index is needed.
 	sort.Slice(rooms, func(i, j int) bool { return rooms[i].CreatedAt.After(rooms[j].CreatedAt) })
 	WriteJSON(w, http.StatusOK, rooms)
+}
+
+const maxNameLen = 100
+
+// validName trims s and reports whether it is non-empty and at most
+// maxNameLen bytes. Shared by customer and agent names.
+func validName(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	return s, s != "" && len(s) <= maxNameLen
 }
 
 func WriteJSON(w http.ResponseWriter, status int, v any) {
