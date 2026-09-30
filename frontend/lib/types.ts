@@ -10,6 +10,8 @@ export interface Room {
   createdAt: string; // ISO timestamp from the Go API
   assignedAgent?: string; // set once an agent claims the room
   claimedAt?: string; // ISO timestamp, set with assignedAgent
+  waitSeconds?: number; // whole seconds from createdAt to claimedAt, recorded at claim
+  slaBreached?: boolean; // whether waitSeconds exceeded the SLA threshold, recorded at claim
 }
 
 export type MessageDirection = "inbound" | "outbound";

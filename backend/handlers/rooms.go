@@ -34,6 +34,10 @@ type Room struct {
 	// Claim fields; absent until an agent claims the room.
 	AssignedAgent string     `json:"assignedAgent,omitempty" firestore:"assignedAgent,omitempty"`
 	ClaimedAt     *time.Time `json:"claimedAt,omitempty" firestore:"claimedAt,omitempty"`
+	// Recorded at claim time and final. Pointers so a recorded 0 / false is
+	// still emitted.
+	WaitSeconds *int64 `json:"waitSeconds,omitempty" firestore:"waitSeconds,omitempty"`
+	SLABreached *bool  `json:"slaBreached,omitempty" firestore:"slaBreached,omitempty"`
 }
 
 type createRoomRequest struct {
@@ -120,6 +124,8 @@ func (h *RoomHandler) Claim(w http.ResponseWriter, r *http.Request) {
 			{Path: "status", Value: claimed.Status},
 			{Path: "assignedAgent", Value: claimed.AssignedAgent},
 			{Path: "claimedAt", Value: *claimed.ClaimedAt},
+			{Path: "waitSeconds", Value: *claimed.WaitSeconds},
+			{Path: "slaBreached", Value: *claimed.SLABreached},
 		})
 	})
 

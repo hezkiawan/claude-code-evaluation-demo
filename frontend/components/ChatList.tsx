@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { CURRENT_AGENT } from "@/lib/agent";
 import { claimRoom, createRoom, fetchRooms } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { isSlaBreached } from "@/lib/sla";
 import type { Platform, PlatformFilter, Room, RoomStatus } from "@/lib/types";
 import Avatar from "./Avatar";
 import PlatformTag from "./PlatformTag";
-import StatusBadge from "./StatusBadge";
+import StatusBadge, { Pill } from "./StatusBadge";
 import Tabs from "./Tabs";
 import { PlusIcon } from "./icons";
 
@@ -71,9 +72,9 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
     load(status);
   }, [status, load]);
 
-  // Keep relative timestamps fresh.
+  // Ticks every second so SLA breaches show up live and timestamps stay fresh.
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60_000);
+    const id = setInterval(() => setNow(new Date()), 1_000);
     return () => clearInterval(id);
   }, []);
 
@@ -166,6 +167,7 @@ interface ChatTileProps {
 // elements never nest; Claim is overlaid on the tile's channel row.
 function ChatTile({ room, now, selected, onSelect, onClaim, claiming, claimError }: ChatTileProps) {
   const claimable = isUnassigned(room.status);
+  const breached = claimable && isSlaBreached(room, now);
 
   return (
     <div className={`rounded-lg transition-colors ${selected ? "bg-raised" : "hover:bg-raised"}`}>
@@ -189,7 +191,10 @@ function ChatTile({ room, now, selected, onSelect, onClaim, claiming, claimError
                   ? `Assigned to ${room.assignedAgent}`
                   : "Customer conversation"}
               </span>
-              <StatusBadge status={room.status} />
+              <div className="flex shrink-0 items-center gap-1">
+                {breached && <Pill className="bg-danger">SLA breached</Pill>}
+                <StatusBadge status={room.status} />
+              </div>
             </div>
             <div className={`mt-2 ${claimable ? "pr-20" : ""}`}>
               <PlatformTag platform={room.platform} />

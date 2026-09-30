@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChatList from "@/components/ChatList";
@@ -43,6 +43,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -145,6 +146,62 @@ describe("ChatList claiming", () => {
 
     await user.click(screen.getByText("Budi Santoso"));
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "r-idle", status: "idle" }));
+  });
+});
+
+describe("ChatList SLA breach", () => {
+  const created = new Date(CREATED_AT).getTime();
+
+  // Only the interval and the clock are faked, so fetch promises and
+  // Testing Library's polling still run on real timers.
+  function freezeClockAt(waitMs: number) {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    vi.setSystemTime(created + waitMs);
+  }
+
+  const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+  const listFetches = () => fetchMock.mock.calls.filter(([u]) => new URL(String(u)).pathname === "/api/rooms").length;
+
+  it("shows the pill on its own once an unassigned room waits past 5:00", async () => {
+    freezeClockAt(4 * 60_000 + 59_000);
+    renderList();
+    await findTile("Budi Santoso");
+    const fetchesBefore = listFetches();
+    const pill = () => within(tile("Budi Santoso")).queryByText("SLA breached");
+
+    expect(pill()).toBeNull(); // 4:59
+    advance(1_000);
+    expect(pill()).toBeNull(); // exactly 5:00
+    advance(500);
+    expect(pill()).toBeNull(); // 5:00.5 is still 300 whole seconds
+    advance(500);
+
+    expect(within(tile("Budi Santoso")).getByText("SLA breached")).toBeInTheDocument();
+    expect(listFetches()).toBe(fetchesBefore);
+  });
+
+  it("shows the pill on bot rooms too", async () => {
+    freezeClockAt(10 * 60_000);
+    const { user } = renderList();
+    await findTile("Budi Santoso");
+
+    await user.click(screen.getByRole("tab", { name: "Bot" }));
+
+    expect(within(await findTile("Citra Lestari")).getByText("SLA breached")).toBeInTheDocument();
+  });
+
+  it("never shows the pill on assigned or closed rooms", async () => {
+    freezeClockAt(4 * 60_000);
+    const { user } = renderList();
+    await findTile("Budi Santoso");
+
+    await user.click(screen.getByRole("tab", { name: "Assigned" }));
+    await findTile("Dewi Anggraini");
+    advance(60 * 60_000);
+    expect(within(tile("Dewi Anggraini")).queryByText("SLA breached")).toBeNull();
+
+    await user.click(screen.getByRole("tab", { name: "Closed" }));
+    expect(within(await findTile("Eka Putra")).queryByText("SLA breached")).toBeNull();
   });
 });
 

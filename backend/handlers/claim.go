@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+// SLAThreshold is the longest a room may wait for a claim. A wait strictly
+// greater than this is an SLA breach.
+const SLAThreshold = 5 * time.Minute
+
 var (
 	ErrInvalidAgentName = errors.New("agentName is required (max 100 chars)")
 	ErrRoomNotFound     = errors.New("room not found")
@@ -37,9 +41,16 @@ func ClaimRoom(room *Room, agentName string, now time.Time) (Room, error) {
 	}
 
 	claimedAt := now.UTC()
+	// The breach is decided on the recorded whole seconds so the two stored
+	// values never disagree (5:00.4 records 300s, not breached).
+	waitSeconds := int64(max(claimedAt.Sub(room.CreatedAt), 0) / time.Second)
+	breached := waitSeconds > int64(SLAThreshold/time.Second)
+
 	claimed := *room
 	claimed.Status = "assigned"
 	claimed.AssignedAgent = agentName
 	claimed.ClaimedAt = &claimedAt
+	claimed.WaitSeconds = &waitSeconds
+	claimed.SLABreached = &breached
 	return claimed, nil
 }
