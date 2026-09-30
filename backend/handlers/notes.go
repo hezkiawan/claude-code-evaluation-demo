@@ -3,13 +3,21 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
+
+// maxNoteLength is the maximum trimmed note length, counted in Unicode code
+// points (not bytes or grapheme clusters).
+const maxNoteLength = 500
+
+var noteContentRequiredMsg = fmt.Sprintf("content is required (1-%d characters)", maxNoteLength)
 
 // Note is the API representation of an Internal Note: a private, append-only
 // annotation on a Room that is never part of the Message stream.
@@ -114,14 +122,16 @@ func validateNoteBody(body []byte) (content string, errMsg string) {
 	}
 	raw, ok := fields["content"]
 	if !ok {
-		return "", "content is required"
+		return "", noteContentRequiredMsg
 	}
-	if err := json.Unmarshal(raw, &content); err != nil {
+	// Decode via a pointer so JSON null (which leaves it nil) is rejected too.
+	var s *string
+	if err := json.Unmarshal(raw, &s); err != nil || s == nil {
 		return "", "content must be a string"
 	}
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return "", "content is required"
+	content = strings.TrimSpace(*s)
+	if n := utf8.RuneCountInString(content); n == 0 || n > maxNoteLength {
+		return "", noteContentRequiredMsg
 	}
 	return content, ""
 }

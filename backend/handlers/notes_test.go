@@ -268,3 +268,109 @@ func TestNotesEndpointsReturn500WithoutDetailsOnStoreFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateNoteContentLengthIsCountedInCodePointsAfterTrimming(t *testing.T) {
+	cases := map[string]struct {
+		content string
+		status  int
+	}{
+		"500 ASCII":                   {strings.Repeat("a", 500), http.StatusCreated},
+		"501 ASCII":                   {strings.Repeat("a", 501), http.StatusBadRequest},
+		"500 emoji":                   {strings.Repeat("😀", 500), http.StatusCreated},
+		"501 emoji":                   {strings.Repeat("😀", 501), http.StatusBadRequest},
+		"composite emoji code points": {strings.Repeat("👍🏽", 250), http.StatusCreated},
+		"composite emoji over limit":  {strings.Repeat("👍🏽", 250) + "a", http.StatusBadRequest},
+		"over 500 only before trim":   {" \t\n" + strings.Repeat("a", 500) + "\u00a0\u2003 \n", http.StatusCreated},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			store := newFakeNoteStore("room-1")
+			mux := newNotesServer(store)
+			body, _ := json.Marshal(map[string]string{"content": tc.content})
+
+			rec := serveNotes(t, mux, http.MethodPost, "/api/rooms/room-1/notes", string(body))
+
+			if tc.status == http.StatusBadRequest {
+				assertError(t, rec, http.StatusBadRequest)
+				if msg := errorMessage(t, rec); msg != "content is required (1-500 characters)" {
+					t.Errorf("error = %q, want %q", msg, "content is required (1-500 characters)")
+				}
+				if len(store.notes["room-1"]) != 0 {
+					t.Error("over-limit note was stored")
+				}
+				return
+			}
+			if rec.Code != tc.status {
+				t.Fatalf("status = %d, want %d; body %s", rec.Code, tc.status, rec.Body)
+			}
+			var got noteJSON
+			json.Unmarshal(rec.Body.Bytes(), &got)
+			if want := strings.TrimSpace(tc.content); got.Content != want {
+				t.Errorf("content = %q, want trimmed %q", got.Content, want)
+			}
+		})
+	}
+}
+
+func TestCreateNoteRejectsNullAndNonStringContent(t *testing.T) {
+	for name, body := range map[string]string{
+		"null content":    `{"content": null}`,
+		"boolean content": `{"content": true}`,
+		"object content":  `{"content": {"text": "hi"}}`,
+		"array content":   `{"content": ["hi"]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			mux := newNotesServer(newFakeNoteStore("room-1"))
+
+			rec := serveNotes(t, mux, http.MethodPost, "/api/rooms/room-1/notes", body)
+
+			assertError(t, rec, http.StatusBadRequest)
+			if msg := errorMessage(t, rec); msg != "content must be a string" {
+				t.Errorf("error = %q, want %q", msg, "content must be a string")
+			}
+		})
+	}
+}
+
+func TestCreateNoteRejectsEmptyContentWithLengthRuleMessage(t *testing.T) {
+	for name, body := range map[string]string{
+		"missing":    `{}`,
+		"empty":      `{"content": ""}`,
+		"whitespace": `{"content": " \t\n\u00a0 "}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			mux := newNotesServer(newFakeNoteStore("room-1"))
+
+			rec := serveNotes(t, mux, http.MethodPost, "/api/rooms/room-1/notes", body)
+
+			assertError(t, rec, http.StatusBadRequest)
+			if msg := errorMessage(t, rec); msg != "content is required (1-500 characters)" {
+				t.Errorf("error = %q, want %q", msg, "content is required (1-500 characters)")
+			}
+		})
+	}
+}
+
+func TestCreateNoteIgnoresUnknownFields(t *testing.T) {
+	mux := newNotesServer(newFakeNoteStore("room-1"))
+
+	rec := serveNotes(t, mux, http.MethodPost, "/api/rooms/room-1/notes",
+		`{"content": "hi", "author": "someone", "extra": {"nested": [1, 2]}}`)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body %s", rec.Code, rec.Body)
+	}
+}
+
+func TestCreateNoteRejectsBodyOver1MB(t *testing.T) {
+	store := newFakeNoteStore("room-1")
+	mux := newNotesServer(store)
+	body := `{"content": "hi", "padding": "` + strings.Repeat("x", 1<<20) + `"}`
+
+	rec := serveNotes(t, mux, http.MethodPost, "/api/rooms/room-1/notes", body)
+
+	assertError(t, rec, http.StatusBadRequest)
+	if len(store.notes["room-1"]) != 0 {
+		t.Error("oversized request was stored")
+	}
+}

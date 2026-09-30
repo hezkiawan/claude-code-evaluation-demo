@@ -5,6 +5,22 @@ import { createNote, fetchNotes } from "@/lib/api";
 import { dateTime } from "@/lib/format";
 import type { Note } from "@/lib/types";
 
+// Matches the backend rule: content trimmed like Go's strings.TrimSpace, then
+// counted in Unicode code points (so 😀 is 1), not UTF-16 units.
+const MAX_NOTE_LENGTH = 500;
+
+// Go's unicode.IsSpace set. Unlike JS trim(), it includes U+0085 and excludes U+FEFF.
+const GO_SPACE = "[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]";
+const GO_TRIM = new RegExp(`^${GO_SPACE}+|${GO_SPACE}+$`, "g");
+
+function trimNote(text: string): string {
+  return text.replace(GO_TRIM, "");
+}
+
+function noteLength(text: string): number {
+  return [...trimNote(text)].length;
+}
+
 // Internal Notes of one Room. Mounted only while the Notes tab is open, so the
 // list is fetched fresh every time the tab is opened.
 export default function RoomNotes({ roomId }: { roomId: string }) {
@@ -64,10 +80,11 @@ function NoteForm({ roomId, onCreated }: { roomId: string; onCreated: (note: Not
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const charCount = noteLength(text);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const content = text.trim();
+    const content = trimNote(text);
     if (!content || saving) return;
     setSaving(true);
     setError(null);
@@ -91,9 +108,14 @@ function NoteForm({ roomId, onCreated }: { roomId: string; onCreated: (note: Not
           aria-label="Internal note"
           className="min-w-0 flex-1 rounded-md border border-input-border bg-panel px-4 py-2 text-default placeholder:text-muted"
         />
+        <span
+          className={`self-center text-sm tabular-nums ${charCount > MAX_NOTE_LENGTH ? "text-danger" : "text-muted"}`}
+        >
+          {charCount}/{MAX_NOTE_LENGTH}
+        </span>
         <button
           type="submit"
-          disabled={saving || !text.trim()}
+          disabled={saving || charCount === 0}
           className="rounded bg-primary px-5 py-2 text-white disabled:opacity-50"
         >
           Add note

@@ -125,4 +125,65 @@ describe("RoomNotes", () => {
     resolveCreate(note({ id: "n9", content: "hello" }));
     expect(await screen.findByRole("listitem")).toHaveTextContent("hello");
   });
+
+  it("shows a live n/500 counter that counts an emoji as one character", async () => {
+    const user = userEvent.setup();
+    fetchNotesMock.mockResolvedValue([]);
+    render(<RoomNotes roomId="room-1" />);
+    await screen.findByText("No internal notes yet");
+
+    expect(screen.getByText("0/500")).toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: /internal note/i }), "hi 😀");
+    expect(screen.getByText("4/500")).toBeInTheDocument();
+  });
+
+  it("does not cap the input and turns the counter danger-colored above 500", async () => {
+    const user = userEvent.setup();
+    fetchNotesMock.mockResolvedValue([]);
+    render(<RoomNotes roomId="room-1" />);
+    await screen.findByText("No internal notes yet");
+
+    const input = screen.getByRole("textbox", { name: /internal note/i });
+    expect(input).not.toHaveAttribute("maxLength");
+    await user.click(input);
+    await user.paste("😀".repeat(500));
+    expect(screen.getByText("500/500")).not.toHaveClass("text-danger");
+    await user.type(input, "a");
+    expect(input).toHaveValue("😀".repeat(500) + "a");
+    expect(screen.getByText("501/500")).toHaveClass("text-danger");
+  });
+
+  it("lets an over-limit note be submitted and shows the backend's rejection, keeping the text", async () => {
+    const user = userEvent.setup();
+    fetchNotesMock.mockResolvedValue([]);
+    createNoteMock.mockRejectedValue(new Error("content is required (1-500 characters)"));
+    render(<RoomNotes roomId="room-1" />);
+    await screen.findByText("No internal notes yet");
+
+    const input = screen.getByRole("textbox", { name: /internal note/i });
+    const tooLong = "a".repeat(501);
+    await user.click(input);
+    await user.paste(tooLong);
+    await user.click(screen.getByRole("button", { name: "Add note" }));
+
+    expect(createNoteMock).toHaveBeenCalledWith("room-1", tooLong);
+    expect(await screen.findByText("content is required (1-500 characters)")).toBeInTheDocument();
+    expect(input).toHaveValue(tooLong);
+  });
+
+  it("trims the same whitespace as the backend when counting", async () => {
+    const user = userEvent.setup();
+    fetchNotesMock.mockResolvedValue([]);
+    render(<RoomNotes roomId="room-1" />);
+    await screen.findByText("No internal notes yet");
+
+    const input = screen.getByRole("textbox", { name: /internal note/i });
+    await user.click(input);
+    // The backend trims U+0085 (NEL) but keeps U+FEFF (BOM); JS trim() does the opposite.
+    await user.paste("hi 　");
+    expect(screen.getByText("2/500")).toBeInTheDocument();
+    await user.clear(input);
+    await user.paste("﻿hi");
+    expect(screen.getByText("3/500")).toBeInTheDocument();
+  });
 });
