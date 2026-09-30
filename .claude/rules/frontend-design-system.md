@@ -15,9 +15,11 @@ Apply these rules to all frontend work. Do not introduce new brand colors. Use t
 | Neutral gray | `#AAABB2` *(sampled)* | Sidebar dividers, quick-reply button fill |
 | Danger / Expired | `#F44336` *(sampled)* | Expired badges, destructive states |
 | Online indicator | `#07BC0C` *(sampled)* | Presence dot on the user avatar |
+| `--color-warning` | `#FFC107` *(semantic, non-brand)* | Warning / Important states, e.g. the Important Internal Note banner and label. Same value in light and dark scopes |
 
 - Focus outline: `outline-color: var(--color-primary)` on all elements.
 - Do not use any other green. Use `#0EC83A` exactly.
+- `--color-warning` is the only yellow. It is a semantic status color, not a brand color: never use it for buttons, links or other brand accents.
 
 ## 2. Dark Theme (default for the app shell)
 
@@ -69,7 +71,7 @@ Text on dark surfaces:
 | Notification count | `#0EC83A` (lighter, ≈`#28D150` on the icon overlay) | `#FFFFFF` | Circle/pill on the top-right of the bell icon |
 | Online presence | `#07BC0C` | n/a | Small dot at the bottom-right of the avatar, with a dark ring |
 
-When adding new statuses, keep the same pill shape and white text. Suggested mapping: success/active → `#0EC83A`, error/expired → `#F44336`, neutral → `#AAABB2`.
+When adding new statuses, keep the same pill shape and white text. Suggested mapping: success/active → `#0EC83A`, error/expired → `#F44336`, warning/important → `#FFC107`, neutral → `#AAABB2`.
 
 ## 6. Chat Bubbles & Conversation UI
 

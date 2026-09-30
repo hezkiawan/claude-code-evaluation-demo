@@ -23,5 +23,6 @@ export interface Message {
 export interface Note {
   id: string;
   content: string;
+  isImportant: boolean; // set at creation, never changed
   createdAt: string; // ISO timestamp from the Go API
 }

@@ -14,7 +14,7 @@ const fetchNotesMock = vi.mocked(fetchNotes);
 const createNoteMock = vi.mocked(createNote);
 
 function note(overrides: Partial<Note>): Note {
-  return { id: "n1", content: "a note", createdAt: "2026-09-30T07:05:00.000Z", ...overrides };
+  return { id: "n1", content: "a note", isImportant: false, createdAt: "2026-09-30T07:05:00.000Z", ...overrides };
 }
 
 beforeEach(() => {
@@ -73,7 +73,7 @@ describe("RoomNotes", () => {
     await user.type(input, "  prefers Bahasa Indonesia  ");
     await user.click(screen.getByRole("button", { name: "Add note" }));
 
-    expect(createNoteMock).toHaveBeenCalledWith("room-1", "prefers Bahasa Indonesia");
+    expect(createNoteMock).toHaveBeenCalledWith("room-1", "prefers Bahasa Indonesia", false);
     const items = await screen.findAllByRole("listitem");
     expect(items).toHaveLength(2);
     expect(items[0]).toHaveTextContent("prefers Bahasa Indonesia");
@@ -166,7 +166,7 @@ describe("RoomNotes", () => {
     await user.paste(tooLong);
     await user.click(screen.getByRole("button", { name: "Add note" }));
 
-    expect(createNoteMock).toHaveBeenCalledWith("room-1", tooLong);
+    expect(createNoteMock).toHaveBeenCalledWith("room-1", tooLong, false);
     expect(await screen.findByText("content is required (1-500 characters)")).toBeInTheDocument();
     expect(input).toHaveValue(tooLong);
   });
@@ -185,5 +185,56 @@ describe("RoomNotes", () => {
     await user.clear(input);
     await user.paste("﻿hi");
     expect(screen.getByText("3/500")).toBeInTheDocument();
+  });
+
+  it("highlights an Important note with a label and banner, and leaves a normal note plain", async () => {
+    fetchNotesMock.mockResolvedValue([
+      note({ id: "n2", content: "customer threatened chargeback", isImportant: true }),
+      note({ id: "n1", content: "prefers Bahasa Indonesia", isImportant: false }),
+    ]);
+
+    render(<RoomNotes roomId="room-1" />);
+
+    const [important, normal] = await screen.findAllByRole("listitem");
+    expect(within(important).getByText("Important")).toHaveClass("text-warning");
+    expect(important).toHaveClass("border-l-4", "border-warning");
+    expect(within(normal).queryByText("Important")).not.toBeInTheDocument();
+    expect(normal).not.toHaveClass("border-l-4");
+    expect(normal).not.toHaveClass("border-warning");
+  });
+
+  it("sends the Important flag and unchecks the box after a successful submit", async () => {
+    const user = userEvent.setup();
+    fetchNotesMock.mockResolvedValue([]);
+    createNoteMock.mockResolvedValue(note({ id: "n2", content: "escalated to billing", isImportant: true }));
+    render(<RoomNotes roomId="room-1" />);
+    await screen.findByText("No internal notes yet");
+
+    const checkbox = screen.getByRole("checkbox", { name: "Important" });
+    expect(checkbox).not.toBeChecked();
+    await user.type(screen.getByRole("textbox", { name: /internal note/i }), "escalated to billing");
+    await user.click(checkbox);
+    await user.click(screen.getByRole("button", { name: "Add note" }));
+
+    expect(createNoteMock).toHaveBeenCalledWith("room-1", "escalated to billing", true);
+    const item = await screen.findByRole("listitem");
+    expect(within(item).getByText("Important")).toBeInTheDocument();
+    expect(checkbox).not.toBeChecked();
+  });
+
+  it("keeps the Important box ticked when a submit fails", async () => {
+    const user = userEvent.setup();
+    fetchNotesMock.mockResolvedValue([]);
+    createNoteMock.mockRejectedValue(new Error("failed to create note"));
+    render(<RoomNotes roomId="room-1" />);
+    await screen.findByText("No internal notes yet");
+
+    const checkbox = screen.getByRole("checkbox", { name: "Important" });
+    await user.type(screen.getByRole("textbox", { name: /internal note/i }), "hi");
+    await user.click(checkbox);
+    await user.click(screen.getByRole("button", { name: "Add note" }));
+
+    expect(await screen.findByText("failed to create note")).toBeInTheDocument();
+    expect(checkbox).toBeChecked();
   });
 });

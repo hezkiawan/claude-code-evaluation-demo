@@ -29,10 +29,10 @@ export function fetchNotes(roomId: string): Promise<Note[]> {
   return request<Note[]>(`/api/rooms/${encodeURIComponent(roomId)}/notes`);
 }
 
-export function createNote(roomId: string, content: string): Promise<Note> {
+export function createNote(roomId: string, content: string, isImportant: boolean): Promise<Note> {
   return request<Note>(`/api/rooms/${encodeURIComponent(roomId)}/notes`, {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, isImportant }),
   });
 }
 

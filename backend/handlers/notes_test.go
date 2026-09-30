@@ -71,9 +71,10 @@ func serveNotes(t *testing.T, mux *http.ServeMux, method, path, body string) *ht
 }
 
 type noteJSON struct {
-	ID        string `json:"id"`
-	Content   string `json:"content"`
-	CreatedAt string `json:"createdAt"`
+	ID          string `json:"id"`
+	Content     string `json:"content"`
+	IsImportant bool   `json:"isImportant"`
+	CreatedAt   string `json:"createdAt"`
 }
 
 func TestCreateNoteTrimsContentAndReturnsCreated(t *testing.T) {
@@ -372,5 +373,85 @@ func TestCreateNoteRejectsBodyOver1MB(t *testing.T) {
 	assertError(t, rec, http.StatusBadRequest)
 	if len(store.notes["room-1"]) != 0 {
 		t.Error("oversized request was stored")
+	}
+}
+
+func TestCreateNoteDefaultsIsImportantToFalse(t *testing.T) {
+	mux := newNotesServer(newFakeNoteStore("room-1"))
+
+	rec := serveNotes(t, mux, http.MethodPost, "/api/rooms/room-1/notes", `{"content": "hi"}`)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body %s", rec.Code, rec.Body)
+	}
+	var got map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &got)
+	if v, ok := got["isImportant"]; !ok || v != false {
+		t.Errorf("isImportant = %v (present %v), want false", v, ok)
+	}
+}
+
+func TestCreateNoteIsImportantRoundTripsThroughList(t *testing.T) {
+	for _, flag := range []bool{true, false} {
+		t.Run(fmt.Sprint(flag), func(t *testing.T) {
+			mux := newNotesServer(newFakeNoteStore("room-1"))
+
+			rec := serveNotes(t, mux, http.MethodPost, "/api/rooms/room-1/notes",
+				fmt.Sprintf(`{"content": "hi", "isImportant": %v}`, flag))
+
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("status = %d, want 201; body %s", rec.Code, rec.Body)
+			}
+			var created noteJSON
+			json.Unmarshal(rec.Body.Bytes(), &created)
+			if created.IsImportant != flag {
+				t.Errorf("created isImportant = %v, want %v", created.IsImportant, flag)
+			}
+			listed := decodeNotes(t, serveNotes(t, mux, http.MethodGet, "/api/rooms/room-1/notes", ""))
+			if len(listed) != 1 || listed[0].IsImportant != flag {
+				t.Errorf("listed = %+v, want one note with isImportant %v", listed, flag)
+			}
+		})
+	}
+}
+
+func TestListNotesReturnsIsImportantFalseForNotesStoredWithoutIt(t *testing.T) {
+	store := newFakeNoteStore("room-1")
+	store.notes["room-1"] = []Note{{ID: "a", Content: "legacy", CreatedAt: time.Now().UTC()}}
+	mux := newNotesServer(store)
+
+	rec := serveNotes(t, mux, http.MethodGet, "/api/rooms/room-1/notes", "")
+
+	var got []map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &got)
+	if len(got) != 1 {
+		t.Fatalf("notes = %s, want one", rec.Body)
+	}
+	if v, ok := got[0]["isImportant"]; !ok || v != false {
+		t.Errorf("isImportant = %v (present %v), want false", v, ok)
+	}
+}
+
+func TestCreateNoteRejectsNonBooleanIsImportant(t *testing.T) {
+	for name, value := range map[string]string{
+		"null":   `null`,
+		"string": `"true"`,
+		"number": `1`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := newFakeNoteStore("room-1")
+			mux := newNotesServer(store)
+
+			rec := serveNotes(t, mux, http.MethodPost, "/api/rooms/room-1/notes",
+				`{"content": "hi", "isImportant": `+value+`}`)
+
+			assertError(t, rec, http.StatusBadRequest)
+			if msg := errorMessage(t, rec); msg != "isImportant must be a boolean" {
+				t.Errorf("error = %q, want %q", msg, "isImportant must be a boolean")
+			}
+			if len(store.notes["room-1"]) != 0 {
+				t.Error("invalid note was stored")
+			}
+		})
 	}
 }

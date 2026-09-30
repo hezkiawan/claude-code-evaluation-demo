@@ -22,9 +22,11 @@ var noteContentRequiredMsg = fmt.Sprintf("content is required (1-%d characters)"
 // Note is the API representation of an Internal Note: a private, append-only
 // annotation on a Room that is never part of the Message stream.
 type Note struct {
-	ID        string    `json:"id" firestore:"-"`
-	Content   string    `json:"content" firestore:"content"`
-	CreatedAt time.Time `json:"createdAt" firestore:"createdAt"`
+	ID      string `json:"id" firestore:"-"`
+	Content string `json:"content" firestore:"content"`
+	// IsImportant is fixed at creation. Notes stored without it decode as false.
+	IsImportant bool      `json:"isImportant" firestore:"isImportant"`
+	CreatedAt   time.Time `json:"createdAt" firestore:"createdAt"`
 }
 
 // NoteStore persists Internal Notes under their Room.
@@ -57,7 +59,7 @@ func (h *NoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	content, msg := validateNoteBody(body)
+	input, msg := validateNoteBody(body)
 	if msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
 		return
@@ -68,8 +70,9 @@ func (h *NoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	note, err := h.store.CreateNote(r.Context(), roomID, Note{
-		Content:   content,
-		CreatedAt: time.Now().UTC(),
+		Content:     input.Content,
+		IsImportant: input.IsImportant,
+		CreatedAt:   time.Now().UTC(),
 	})
 	if err != nil {
 		log.Printf("create note in room %s: %v", roomID, err)
@@ -113,27 +116,40 @@ func (h *NoteHandler) requireRoom(w http.ResponseWriter, r *http.Request, roomID
 	return true
 }
 
-// validateNoteBody parses a create-note request body and returns the trimmed
-// content, or a client-facing error message.
-func validateNoteBody(body []byte) (content string, errMsg string) {
+// noteInput is a validated create-note request.
+type noteInput struct {
+	Content     string // trimmed
+	IsImportant bool
+}
+
+// validateNoteBody parses a create-note request body and returns the validated
+// input, or a client-facing error message.
+func validateNoteBody(body []byte) (input noteInput, errMsg string) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(body, &fields); err != nil {
-		return "", "invalid JSON body"
+		return noteInput{}, "invalid JSON body"
 	}
 	raw, ok := fields["content"]
 	if !ok {
-		return "", noteContentRequiredMsg
+		return noteInput{}, noteContentRequiredMsg
 	}
 	// Decode via a pointer so JSON null (which leaves it nil) is rejected too.
 	var s *string
 	if err := json.Unmarshal(raw, &s); err != nil || s == nil {
-		return "", "content must be a string"
+		return noteInput{}, "content must be a string"
 	}
-	content = strings.TrimSpace(*s)
-	if n := utf8.RuneCountInString(content); n == 0 || n > maxNoteLength {
-		return "", noteContentRequiredMsg
+	input.Content = strings.TrimSpace(*s)
+	if n := utf8.RuneCountInString(input.Content); n == 0 || n > maxNoteLength {
+		return noteInput{}, noteContentRequiredMsg
 	}
-	return content, ""
+	if raw, ok := fields["isImportant"]; ok {
+		var b *bool
+		if err := json.Unmarshal(raw, &b); err != nil || b == nil {
+			return noteInput{}, "isImportant must be a boolean"
+		}
+		input.IsImportant = *b
+	}
+	return input, ""
 }
 
 // sortNotesNewestFirst orders notes by createdAt descending, ties broken by ID
