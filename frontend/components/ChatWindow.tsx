@@ -64,6 +64,12 @@ function RoomChat({ room }: { room: Room }) {
             <PlatformTag platform={room.platform} />
             <span>·</span>
             <span className="capitalize">{room.status}</span>
+            {room.assignedAgent && (
+              <>
+                <span>·</span>
+                <span className="truncate">Assigned to {room.assignedAgent}</span>
+              </>
+            )}
           </div>
         </div>
       </header>

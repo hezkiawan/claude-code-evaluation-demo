@@ -8,6 +8,9 @@ export interface Room {
   platform: Platform;
   status: RoomStatus;
   createdAt: string; // ISO timestamp from the Go API
+  assignedAgent?: string;
+  claimedAt?: string; // ISO timestamp, set when an agent claims the room
+  slaBreached?: boolean; // recorded at claim time by the API
 }
 
 export type MessageDirection = "inbound" | "outbound";
