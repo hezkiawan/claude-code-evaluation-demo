@@ -1,4 +1,4 @@
-import type { Platform, Room, RoomStatus } from "./types";
+import type { Note, Platform, Room, RoomStatus } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -22,6 +22,21 @@ export function createRoom(customerName: string, platform: Platform): Promise<Ro
   return request<Room>("/api/rooms", {
     method: "POST",
     body: JSON.stringify({ customerName, platform }),
+  });
+}
+
+function notesPath(roomId: string): string {
+  return `/api/rooms/${encodeURIComponent(roomId)}/notes`;
+}
+
+export function fetchNotes(roomId: string): Promise<Note[]> {
+  return request<Note[]>(notesPath(roomId));
+}
+
+export function createNote(roomId: string, content: string, isImportant: boolean): Promise<Note> {
+  return request<Note>(notesPath(roomId), {
+    method: "POST",
+    body: JSON.stringify({ content, isImportant }),
   });
 }
 

@@ -6,8 +6,17 @@ import { db } from "@/lib/firebase";
 import { clockTime } from "@/lib/format";
 import type { Message, MessageDirection, Room } from "@/lib/types";
 import Avatar from "./Avatar";
+import NotesPanel from "./NotesPanel";
 import PlatformTag from "./PlatformTag";
+import Tabs from "./Tabs";
 import { ChatIcon, SendIcon } from "./icons";
+
+type RoomView = "chat" | "notes";
+
+const VIEW_TABS = [
+  { value: "chat", label: "Chat" },
+  { value: "notes", label: "Notes" },
+] as const satisfies readonly { value: RoomView; label: string }[];
 
 export default function ChatWindow({ room }: { room: Room | null }) {
   if (!room) {
@@ -25,7 +34,9 @@ export default function ChatWindow({ room }: { room: Room | null }) {
 function RoomChat({ room }: { room: Room }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<RoomView>("chat");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isChatView = view === "chat";
 
   useEffect(() => {
     const q = query(collection(db, "rooms", room.id, "messages"), orderBy("createdAt", "asc"));
@@ -50,9 +61,10 @@ function RoomChat({ room }: { room: Room }) {
     );
   }, [room.id]);
 
+  // Re-run on returning to the Chat tab: hiding the pane resets its scroll position.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+    if (isChatView) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length, isChatView]);
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
@@ -68,18 +80,29 @@ function RoomChat({ room }: { room: Room }) {
         </div>
       </header>
 
-      <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
-        {error && <p className="text-center text-sm text-danger">{error}</p>}
-        {!error && messages.length === 0 && (
-          <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
-        )}
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
-        <div ref={bottomRef} />
+      <Tabs tabs={VIEW_TABS} active={view} onChange={setView} className="px-2" />
+
+      {/* Kept mounted while hidden so an unsent draft survives tab switches. */}
+      <div role="tabpanel" aria-label="Chat" hidden={!isChatView} className={isChatView ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+        <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
+          {error && <p className="text-center text-sm text-danger">{error}</p>}
+          {!error && messages.length === 0 && (
+            <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
+          )}
+          {messages.map((m) => (
+            <MessageBubble key={m.id} message={m} />
+          ))}
+          <div ref={bottomRef} />
+        </div>
+
+        <Composer roomId={room.id} />
       </div>
 
-      <Composer roomId={room.id} />
+      {!isChatView && (
+        <div role="tabpanel" aria-label="Notes" className="flex min-h-0 flex-1 flex-col">
+          <NotesPanel roomId={room.id} />
+        </div>
+      )}
     </section>
   );
 }

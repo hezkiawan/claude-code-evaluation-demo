@@ -10,6 +10,14 @@ export interface Room {
   createdAt: string; // ISO timestamp from the Go API
 }
 
+// Internal agent-only note on a room (rooms/{roomId}/notes), served by the Go API.
+export interface Note {
+  id: string;
+  content: string;
+  isImportant: boolean;
+  createdAt: string; // ISO timestamp from the Go API
+}
+
 export type MessageDirection = "inbound" | "outbound";
 
 export interface Message {

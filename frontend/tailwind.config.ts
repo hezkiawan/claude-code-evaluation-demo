@@ -18,6 +18,8 @@ const config: Config = {
         neutral: "var(--color-neutral)",
         danger: "var(--color-danger)",
         online: "var(--color-online)",
+        warning: "var(--color-warning)",
+        "on-warning": "var(--color-on-warning)",
       },
       borderColor: {
         DEFAULT: "var(--border-color-default)",
