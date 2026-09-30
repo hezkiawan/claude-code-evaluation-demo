@@ -385,7 +385,9 @@ func TestCreateNoteDefaultsIsImportantToFalse(t *testing.T) {
 		t.Fatalf("status = %d, want 201; body %s", rec.Code, rec.Body)
 	}
 	var got map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &got)
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body, err)
+	}
 	if v, ok := got["isImportant"]; !ok || v != false {
 		t.Errorf("isImportant = %v (present %v), want false", v, ok)
 	}
@@ -403,7 +405,9 @@ func TestCreateNoteIsImportantRoundTripsThroughList(t *testing.T) {
 				t.Fatalf("status = %d, want 201; body %s", rec.Code, rec.Body)
 			}
 			var created noteJSON
-			json.Unmarshal(rec.Body.Bytes(), &created)
+			if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+				t.Fatalf("decode %s: %v", rec.Body, err)
+			}
 			if created.IsImportant != flag {
 				t.Errorf("created isImportant = %v, want %v", created.IsImportant, flag)
 			}
@@ -423,7 +427,9 @@ func TestListNotesReturnsIsImportantFalseForNotesStoredWithoutIt(t *testing.T) {
 	rec := serveNotes(t, mux, http.MethodGet, "/api/rooms/room-1/notes", "")
 
 	var got []map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &got)
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body, err)
+	}
 	if len(got) != 1 {
 		t.Fatalf("notes = %s, want one", rec.Body)
 	}

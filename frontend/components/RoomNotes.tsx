@@ -79,7 +79,7 @@ function NoteCard({ note }: { note: Note }) {
 
 function NoteForm({ roomId, onCreated }: { roomId: string; onCreated: (note: Note) => void }) {
   const [text, setText] = useState("");
-  const [important, setImportant] = useState(false);
+  const [isImportant, setIsImportant] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const charCount = noteLength(text);
@@ -91,9 +91,9 @@ function NoteForm({ roomId, onCreated }: { roomId: string; onCreated: (note: Not
     setSaving(true);
     setError(null);
     try {
-      onCreated(await createNote(roomId, content, important));
+      onCreated(await createNote(roomId, content, isImportant));
       setText("");
-      setImportant(false);
+      setIsImportant(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add note");
     } finally {
@@ -114,8 +114,8 @@ function NoteForm({ roomId, onCreated }: { roomId: string; onCreated: (note: Not
         <label className="flex items-center gap-2 self-center text-sm text-default">
           <input
             type="checkbox"
-            checked={important}
-            onChange={(e) => setImportant(e.target.checked)}
+            checked={isImportant}
+            onChange={(e) => setIsImportant(e.target.checked)}
             className="accent-primary"
           />
           Important

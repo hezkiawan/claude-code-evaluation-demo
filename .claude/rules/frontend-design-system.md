@@ -73,6 +73,8 @@ Text on dark surfaces:
 
 When adding new statuses, keep the same pill shape and white text. Suggested mapping: success/active → `#0EC83A`, error/expired → `#F44336`, warning/important → `#FFC107`, neutral → `#AAABB2`.
 
+Exception: the Important Internal Note marker is not a pill badge. It is a 4px `--color-warning` left border on the card plus a small "Important" text label in `--color-warning` on the panel background, because white text on `#FFC107` has too little contrast.
+
 ## 6. Chat Bubbles & Conversation UI
 
 **Outgoing / business message bubble (template)**
