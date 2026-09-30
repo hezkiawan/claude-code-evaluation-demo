@@ -112,37 +112,57 @@ function NoteForm({ roomId, isDisabled, onCreated }: NoteFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="border-t border-raised bg-panel px-6 py-4">
-      <div className="flex items-center gap-3">
-        <input
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Add an internal note…"
-          aria-label="Note"
-          className="min-w-0 flex-1 rounded-md border border-input-border bg-panel px-4 py-2 text-default placeholder:text-muted"
-        />
-        <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-default">
-          <input
-            type="checkbox"
-            checked={isImportant}
-            onChange={(e) => setIsImportant(e.target.checked)}
-            className="h-4 w-4 accent-primary"
-          />
-          Important
-        </label>
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="flex items-center gap-2 rounded bg-primary px-5 py-2 text-white disabled:opacity-50"
-        >
-          <PlusIcon width={18} height={18} />
-          Add note
-        </button>
-      </div>
+      <NoteFormRow
+        content={content}
+        isImportant={isImportant}
+        canSubmit={canSubmit}
+        onContentChange={setContent}
+        onImportantChange={setIsImportant}
+      />
       {error && (
         <p role="alert" className="mt-2 text-sm text-danger">
           {error}
         </p>
       )}
     </form>
+  );
+}
+
+type NoteFormRowProps = {
+  content: string;
+  isImportant: boolean;
+  canSubmit: boolean;
+  onContentChange: (content: string) => void;
+  onImportantChange: (isImportant: boolean) => void;
+};
+
+function NoteFormRow({ content, isImportant, canSubmit, onContentChange, onImportantChange }: NoteFormRowProps) {
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        value={content}
+        onChange={(e) => onContentChange(e.target.value)}
+        placeholder="Add an internal note…"
+        aria-label="Note"
+        className="min-w-0 flex-1 rounded-md border border-input-border bg-panel px-4 py-2 text-default placeholder:text-muted"
+      />
+      <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-default">
+        <input
+          type="checkbox"
+          checked={isImportant}
+          onChange={(e) => onImportantChange(e.target.checked)}
+          className="h-4 w-4 accent-primary"
+        />
+        Important
+      </label>
+      <button
+        type="submit"
+        disabled={!canSubmit}
+        className="flex items-center gap-2 rounded bg-primary px-5 py-2 text-white disabled:opacity-50"
+      >
+        <PlusIcon width={18} height={18} />
+        Add note
+      </button>
+    </div>
   );
 }

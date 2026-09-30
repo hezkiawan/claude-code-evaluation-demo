@@ -20,6 +20,7 @@ Risk 2 → 500 Unicode characters (runes) after trimming.
 | Frontend RED | `9d364ff` | `vitest run` → 7 failed / 1 passed: `fetchNotes is not a function`, no `tab` "Chat"/"Notes", `@/components/NotesPanel` missing |
 | Frontend GREEN | `6e9f40f` | `vitest run` → 20 passed; `tsc --noEmit` clean; `next build` ok |
 | Fix + refactor | `33d2901` | RED `undefined: isValidDocID` → GREEN, 52 Go test cases passing (including subtests); vitest 20 passing |
+| Review fix (HIGH) | this commit | Split `RoomChat` (77→17 lines) and `NoteForm` (61→42 lines) to meet the 50-line rule; behaviour unchanged, vitest 20/20 before and after, `tsc` + `next build` ok |
 
 ## Test specification
 | # | Guarantee | Test | Type | Result |

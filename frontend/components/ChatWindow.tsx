@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { addDoc, collection, onSnapshot, orderBy, query, serverTimestamp } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  type QueryDocumentSnapshot,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { clockTime } from "@/lib/format";
 import type { Message, MessageDirection, Room } from "@/lib/types";
@@ -32,79 +40,89 @@ export default function ChatWindow({ room }: { room: Room | null }) {
 }
 
 function RoomChat({ room }: { room: Room }) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<RoomView>("chat");
-  const bottomRef = useRef<HTMLDivElement>(null);
   const isChatView = view === "chat";
-  const chatPanelClass = isChatView ? "flex min-h-0 flex-1 flex-col" : "hidden";
-
-  useEffect(() => {
-    const q = query(collection(db, "rooms", room.id, "messages"), orderBy("createdAt", "asc"));
-    return onSnapshot(
-      q,
-      (snap) => {
-        setError(null);
-        setMessages(
-          snap.docs.map((d) => {
-            // "estimate" gives pending server timestamps a local value instead of null.
-            const data = d.data({ serverTimestamps: "estimate" });
-            return {
-              id: d.id,
-              text: String(data.text ?? ""),
-              direction: (data.direction === "outbound" ? "outbound" : "inbound") as MessageDirection,
-              createdAt: data.createdAt?.toDate?.() ?? null,
-            };
-          }),
-        );
-      },
-      (err) => setError(err.message),
-    );
-  }, [room.id]);
-
-  // Re-run on returning to the Chat tab: hiding the pane resets its scroll position.
-  useEffect(() => {
-    if (isChatView) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, isChatView]);
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
-      <header className="flex items-center gap-4 border-b border-raised bg-panel px-6 py-4">
-        <Avatar name={room.name} size="md" />
-        <div className="min-w-0">
-          <h2 className="truncate text-lg text-default">{room.name}</h2>
-          <div className="flex items-center gap-2 text-sm text-muted">
-            <PlatformTag platform={room.platform} />
-            <span>·</span>
-            <span className="capitalize">{room.status}</span>
-          </div>
-        </div>
-      </header>
-
+      <RoomHeader room={room} />
       <Tabs tabs={VIEW_TABS} active={view} onChange={setView} className="px-2" />
-
-      {/* Kept mounted while hidden so an unsent draft survives tab switches. */}
-      <div role="tabpanel" aria-label="Chat" hidden={!isChatView} className={chatPanelClass}>
-        <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
-          {error && <p className="text-center text-sm text-danger">{error}</p>}
-          {!error && messages.length === 0 && (
-            <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
-          )}
-          {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} />
-          ))}
-          <div ref={bottomRef} />
-        </div>
-
-        <Composer roomId={room.id} />
-      </div>
-
+      <ChatPanel roomId={room.id} isActive={isChatView} />
       {!isChatView && (
         <div role="tabpanel" aria-label="Notes" className="flex min-h-0 flex-1 flex-col">
           <NotesPanel roomId={room.id} />
         </div>
       )}
     </section>
+  );
+}
+
+function RoomHeader({ room }: { room: Room }) {
+  return (
+    <header className="flex items-center gap-4 border-b border-raised bg-panel px-6 py-4">
+      <Avatar name={room.name} size="md" />
+      <div className="min-w-0">
+        <h2 className="truncate text-lg text-default">{room.name}</h2>
+        <div className="flex items-center gap-2 text-sm text-muted">
+          <PlatformTag platform={room.platform} />
+          <span>·</span>
+          <span className="capitalize">{room.status}</span>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function toMessage(d: QueryDocumentSnapshot): Message {
+  // "estimate" gives pending server timestamps a local value instead of null.
+  const data = d.data({ serverTimestamps: "estimate" });
+  return {
+    id: d.id,
+    text: String(data.text ?? ""),
+    direction: (data.direction === "outbound" ? "outbound" : "inbound") as MessageDirection,
+    createdAt: data.createdAt?.toDate?.() ?? null,
+  };
+}
+
+// Kept mounted while hidden so the live subscription and an unsent draft survive tab switches.
+function ChatPanel({ roomId, isActive }: { roomId: string; isActive: boolean }) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const panelClass = isActive ? "flex min-h-0 flex-1 flex-col" : "hidden";
+
+  useEffect(() => {
+    const q = query(collection(db, "rooms", roomId, "messages"), orderBy("createdAt", "asc"));
+    return onSnapshot(
+      q,
+      (snap) => {
+        setError(null);
+        setMessages(snap.docs.map(toMessage));
+      },
+      (err) => setError(err.message),
+    );
+  }, [roomId]);
+
+  // Re-run on returning to the Chat tab: hiding the pane resets its scroll position.
+  useEffect(() => {
+    if (isActive) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length, isActive]);
+
+  return (
+    <div role="tabpanel" aria-label="Chat" hidden={!isActive} className={panelClass}>
+      <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
+        {error && <p className="text-center text-sm text-danger">{error}</p>}
+        {!error && messages.length === 0 && (
+          <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
+        )}
+        {messages.map((m) => (
+          <MessageBubble key={m.id} message={m} />
+        ))}
+        <div ref={bottomRef} />
+      </div>
+
+      <Composer roomId={roomId} />
+    </div>
   );
 }
 
