@@ -25,6 +25,13 @@ export function createRoom(customerName: string, platform: Platform): Promise<Ro
   });
 }
 
+export function claimRoom(roomId: string, agentName: string): Promise<Room> {
+  return request<Room>(`/api/rooms/${encodeURIComponent(roomId)}/claim`, {
+    method: "POST",
+    body: JSON.stringify({ agentName }),
+  });
+}
+
 export async function checkHealth(): Promise<boolean> {
   try {
     await request<{ status: string }>("/api/health");

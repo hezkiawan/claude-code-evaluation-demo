@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { createRoom, fetchRooms } from "@/lib/api";
+import { claimRoom, createRoom, fetchRooms } from "@/lib/api";
+import { CURRENT_AGENT, isClaimable, isSlaBreached } from "@/lib/claim";
 import { relativeTime } from "@/lib/format";
 import type { Platform, PlatformFilter, Room, RoomStatus } from "@/lib/types";
 import Avatar from "./Avatar";
 import PlatformTag from "./PlatformTag";
+import SlaBadge from "./SlaBadge";
 import StatusBadge from "./StatusBadge";
 import Tabs from "./Tabs";
 import { PlusIcon } from "./icons";
@@ -35,10 +37,13 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   const load = useCallback(async (s: RoomStatus) => {
     setLoading(true);
     setError(null);
+    setClaimError(null);
     try {
       setRooms(await fetchRooms(s));
     } catch (err) {
@@ -53,9 +58,9 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
     load(status);
   }, [status, load]);
 
-  // Keep relative timestamps fresh.
+  // Tick every second so SLA badges appear live and timestamps stay fresh.
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60_000);
+    const id = setInterval(() => setNow(new Date()), 1_000);
     return () => clearInterval(id);
   }, []);
 
@@ -70,6 +75,23 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
     onSelect(room);
   };
 
+  const handleClaim = async (room: Room) => {
+    setClaimingId(room.id);
+    setClaimError(null);
+    try {
+      const claimed = await claimRoom(room.id, CURRENT_AGENT);
+      setRooms((prev) => prev.filter((r) => r.id !== claimed.id));
+      setStatus("assigned");
+      onSelect(claimed);
+    } catch (err) {
+      // Most likely someone else claimed or closed it; refresh, then show why.
+      await load(status);
+      setClaimError(`Could not claim ${room.name}: ${err instanceof Error ? err.message : "unknown error"}`);
+    } finally {
+      setClaimingId(null);
+    }
+  };
+
   return (
     <aside className="flex w-[380px] shrink-0 flex-col border-r border-raised bg-panel">
       <Tabs tabs={PLATFORM_TABS} active={platform} onChange={setPlatform} />
@@ -77,6 +99,11 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
       <Tabs tabs={STATUS_TABS} active={status} onChange={setStatus} className="justify-between px-2" />
 
       <ul className="flex-1 space-y-1 overflow-y-auto p-3">
+        {claimError && (
+          <li role="alert" className="px-2 pb-2 text-sm text-danger">
+            {claimError}
+          </li>
+        )}
         {loading && <ListNote>Loading…</ListNote>}
         {!loading && error && <ListNote tone="error">{error}</ListNote>}
         {!loading && !error && visible.length === 0 && <ListNote>No {status} chats</ListNote>}
@@ -87,7 +114,9 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
                 room={room}
                 now={now}
                 selected={room.id === selectedRoomId}
+                claiming={claimingId === room.id}
                 onClick={() => onSelect(room)}
+                onClaim={() => handleClaim(room)}
               />
             </li>
           ))}
@@ -96,32 +125,58 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
   );
 }
 
-function ChatTile({ room, now, selected, onClick }: { room: Room; now: Date; selected: boolean; onClick: () => void }) {
+interface ChatTileProps {
+  room: Room;
+  now: Date;
+  selected: boolean;
+  claiming: boolean;
+  onClick: () => void;
+  onClaim: () => void;
+}
+
+function ChatTile({ room, now, selected, claiming, onClick, onClaim }: ChatTileProps) {
+  const claimable = isClaimable(room);
   return (
-    <button
-      onClick={onClick}
-      aria-current={selected ? "true" : undefined}
-      className={`flex w-full gap-4 rounded-lg p-4 text-left transition-colors ${
-        selected ? "bg-raised" : "hover:bg-raised"
-      }`}
-    >
-      <Avatar name={room.name} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-lg font-medium text-default">{room.name}</span>
-          <time dateTime={room.createdAt} className="shrink-0 text-sm text-muted">
-            {relativeTime(new Date(room.createdAt), now)}
-          </time>
+    // The Claim button sits outside the select button: buttons can't nest.
+    <div className={`relative rounded-lg transition-colors ${selected ? "bg-raised" : "hover:bg-raised"}`}>
+      <button
+        onClick={onClick}
+        aria-current={selected ? "true" : undefined}
+        className="flex w-full gap-4 rounded-lg p-4 text-left"
+      >
+        <Avatar name={room.name} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-lg font-medium text-default">{room.name}</span>
+            <time dateTime={room.createdAt} className="shrink-0 text-sm text-muted">
+              {relativeTime(new Date(room.createdAt), now)}
+            </time>
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-2 border-b border-raised pb-2">
+            <span className="truncate text-sm text-muted">
+              {room.assignedAgent ? `Assigned to ${room.assignedAgent}` : "Customer conversation"}
+            </span>
+            <span className="flex shrink-0 items-center gap-1">
+              {isSlaBreached(room, now) && <SlaBadge />}
+              <StatusBadge status={room.status} />
+            </span>
+          </div>
+          <div className={`mt-2 ${claimable ? "pr-20" : ""}`}>
+            <PlatformTag platform={room.platform} />
+          </div>
         </div>
-        <div className="mt-1 flex items-center justify-between gap-2 border-b border-raised pb-2">
-          <span className="truncate text-sm text-muted">Customer conversation</span>
-          <StatusBadge status={room.status} />
-        </div>
-        <div className="mt-2">
-          <PlatformTag platform={room.platform} />
-        </div>
-      </div>
-    </button>
+      </button>
+      {claimable && (
+        <button
+          onClick={onClaim}
+          disabled={claiming}
+          aria-label={`Claim ${room.name}`}
+          className="absolute bottom-3 right-4 rounded bg-primary px-3 py-1 text-sm text-white disabled:opacity-50"
+        >
+          {claiming ? "Claiming…" : "Claim"}
+        </button>
+      )}
+    </div>
   );
 }
 

@@ -26,6 +26,12 @@ type Room struct {
 	Platform  string    `json:"platform" firestore:"platform"`
 	Status    string    `json:"status" firestore:"status"`
 	CreatedAt time.Time `json:"createdAt" firestore:"createdAt"`
+
+	// Claim fields; zero until an agent claims the room (see claim.go).
+	AssignedAgent string     `json:"assignedAgent,omitempty" firestore:"assignedAgent,omitempty"`
+	ClaimedAt     *time.Time `json:"claimedAt,omitempty" firestore:"claimedAt,omitempty"`
+	WaitSeconds   int64      `json:"waitSeconds,omitempty" firestore:"waitSeconds,omitempty"`
+	SLABreached   bool       `json:"slaBreached" firestore:"slaBreached"`
 }
 
 type createRoomRequest struct {
