@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
 )
 
-const notesCollection = "notes"
+const (
+	notesCollection = "notes"
+	maxDocIDBytes   = 1500
+)
 
 // FirestoreNoteStore stores notes in the rooms/{roomId}/notes subcollection.
 type FirestoreNoteStore struct {
@@ -21,12 +25,12 @@ func NewFirestoreNoteStore(fs *firestore.Client) *FirestoreNoteStore {
 }
 
 func (s *FirestoreNoteStore) RoomExists(ctx context.Context, roomID string) (bool, error) {
-	ref := s.fs.Collection(roomsCollection).Doc(roomID)
-	if ref == nil {
-		// Doc returns nil for IDs Firestore rejects (e.g. "__x__"); no such room can exist.
+	if !isValidDocID(roomID) {
+		// Also stops a "/" (from an escaped %2F in the URL) from addressing
+		// another document path, e.g. rooms/x/notes/y.
 		return false, nil
 	}
-	snap, err := ref.Get(ctx)
+	snap, err := s.fs.Collection(roomsCollection).Doc(roomID).Get(ctx)
 	if snap != nil && !snap.Exists() {
 		// Get reports a missing document as NotFound alongside a non-existent snapshot.
 		return false, nil
@@ -71,4 +75,14 @@ func (s *FirestoreNoteStore) ListNotes(ctx context.Context, roomID string) ([]No
 
 func (s *FirestoreNoteStore) notes(roomID string) *firestore.CollectionRef {
 	return s.fs.Collection(roomsCollection).Doc(roomID).Collection(notesCollection)
+}
+
+// isValidDocID reports whether id is a legal single Firestore document ID
+// (https://firebase.google.com/docs/firestore/quotas#collections_documents_and_fields).
+func isValidDocID(id string) bool {
+	if id == "" || id == "." || id == ".." || len(id) > maxDocIDBytes || strings.Contains(id, "/") {
+		return false
+	}
+	isReserved := len(id) >= 4 && strings.HasPrefix(id, "__") && strings.HasSuffix(id, "__")
+	return !isReserved
 }

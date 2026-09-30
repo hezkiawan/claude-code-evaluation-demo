@@ -37,6 +37,7 @@ function RoomChat({ room }: { room: Room }) {
   const [view, setView] = useState<RoomView>("chat");
   const bottomRef = useRef<HTMLDivElement>(null);
   const isChatView = view === "chat";
+  const chatPanelClass = isChatView ? "flex min-h-0 flex-1 flex-col" : "hidden";
 
   useEffect(() => {
     const q = query(collection(db, "rooms", room.id, "messages"), orderBy("createdAt", "asc"));
@@ -83,7 +84,7 @@ function RoomChat({ room }: { room: Room }) {
       <Tabs tabs={VIEW_TABS} active={view} onChange={setView} className="px-2" />
 
       {/* Kept mounted while hidden so an unsent draft survives tab switches. */}
-      <div role="tabpanel" aria-label="Chat" hidden={!isChatView} className={isChatView ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+      <div role="tabpanel" aria-label="Chat" hidden={!isChatView} className={chatPanelClass}>
         <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
           {error && <p className="text-center text-sm text-danger">{error}</p>}
           {!error && messages.length === 0 && (

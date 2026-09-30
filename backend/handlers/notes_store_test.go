@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,5 +104,37 @@ func TestFirestoreNoteStore_ListEmptyRoom(t *testing.T) {
 	}
 	if got == nil || len(got) != 0 {
 		t.Errorf("ListNotes = %#v, want non-nil empty slice", got)
+	}
+}
+
+func TestIsValidDocID(t *testing.T) {
+	tests := []struct {
+		id   string
+		want bool
+	}{
+		{"abc123", true},
+		{"Xy9_-.x", true},
+		{"a.b", true},
+		{"__not_reserved", true},
+		{"", false},
+		{".", false},
+		{"..", false},
+		{"a/b", false},
+		{"x/notes/y", false},
+		{"__reserved__", false},
+		{"__x__", false},
+		{strings.Repeat("a", 1500), true},
+		{strings.Repeat("a", 1501), false},
+	}
+	for _, tc := range tests {
+		name := tc.id
+		if len(name) > 20 {
+			name = fmt.Sprintf("%d bytes", len(tc.id))
+		}
+		t.Run(name, func(t *testing.T) {
+			if got := isValidDocID(tc.id); got != tc.want {
+				t.Errorf("isValidDocID(%q) = %v, want %v", name, got, tc.want)
+			}
+		})
 	}
 }
