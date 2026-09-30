@@ -37,6 +37,7 @@ func main() {
 	defer fs.Close()
 
 	rooms := handlers.NewRoomHandler(fs)
+	notes := handlers.NewNoteHandler(handlers.NewFirestoreNoteStore(fs))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -44,6 +45,7 @@ func main() {
 	})
 	mux.HandleFunc("GET /api/rooms", rooms.List)
 	mux.HandleFunc("POST /api/rooms", rooms.Create)
+	notes.Register(mux)
 
 	addr := os.Getenv("PORT")
 	if addr == "" {

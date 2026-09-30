@@ -19,3 +19,14 @@ export function relativeTime(date: Date, now: Date = new Date()): string {
 export function clockTime(date: Date): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 }
+
+export function dateTime(date: Date): string {
+  return date.toLocaleString([], {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}

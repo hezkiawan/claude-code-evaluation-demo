@@ -18,3 +18,10 @@ export interface Message {
   direction: MessageDirection;
   createdAt: Date | null;
 }
+
+// An Internal Note: a private annotation on a Room, never part of the Message stream.
+export interface Note {
+  id: string;
+  content: string;
+  createdAt: string; // ISO timestamp from the Go API
+}

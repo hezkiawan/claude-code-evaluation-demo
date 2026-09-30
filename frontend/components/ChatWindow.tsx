@@ -7,7 +7,16 @@ import { clockTime } from "@/lib/format";
 import type { Message, MessageDirection, Room } from "@/lib/types";
 import Avatar from "./Avatar";
 import PlatformTag from "./PlatformTag";
+import RoomNotes from "./RoomNotes";
+import Tabs from "./Tabs";
 import { ChatIcon, SendIcon } from "./icons";
+
+type RoomTab = "chat" | "notes";
+
+const ROOM_TABS = [
+  { value: "chat", label: "Chat" },
+  { value: "notes", label: "Notes" },
+] as const satisfies readonly { value: RoomTab; label: string }[];
 
 export default function ChatWindow({ room }: { room: Room | null }) {
   if (!room) {
@@ -18,13 +27,14 @@ export default function ChatWindow({ room }: { room: Room | null }) {
       </section>
     );
   }
-  // Keyed so message state resets cleanly when switching rooms.
+  // Keyed so message and tab state reset cleanly when switching rooms.
   return <RoomChat key={room.id} room={room} />;
 }
 
 function RoomChat({ room }: { room: Room }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<RoomTab>("chat");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -52,7 +62,7 @@ function RoomChat({ room }: { room: Room }) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [messages.length, tab]);
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
@@ -68,18 +78,26 @@ function RoomChat({ room }: { room: Room }) {
         </div>
       </header>
 
-      <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
-        {error && <p className="text-center text-sm text-danger">{error}</p>}
-        {!error && messages.length === 0 && (
-          <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
-        )}
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
-        <div ref={bottomRef} />
-      </div>
+      <Tabs tabs={ROOM_TABS} active={tab} onChange={setTab} />
 
-      <Composer roomId={room.id} />
+      {tab === "chat" ? (
+        <>
+          <div className="flex-1 space-y-3 overflow-y-auto bg-raised p-6">
+            {error && <p className="text-center text-sm text-danger">{error}</p>}
+            {!error && messages.length === 0 && (
+              <p className="text-center text-sm text-muted">No messages yet. Say hello 👋</p>
+            )}
+            {messages.map((m) => (
+              <MessageBubble key={m.id} message={m} />
+            ))}
+            <div ref={bottomRef} />
+          </div>
+
+          <Composer roomId={room.id} />
+        </>
+      ) : (
+        <RoomNotes roomId={room.id} />
+      )}
     </section>
   );
 }
