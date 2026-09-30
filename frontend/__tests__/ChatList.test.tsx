@@ -52,11 +52,11 @@ describe("ChatList claiming", () => {
     await screen.findByRole("button", { name: "Claim Budi Santoso" });
     expect(screen.queryByText("SLA breached")).not.toBeInTheDocument();
 
-    act(() => {
-      vi.advanceTimersByTime(11_000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(11_000);
     });
 
-    expect(screen.getByText("SLA breached")).toBeInTheDocument();
+    expect(await screen.findByText("SLA breached")).toBeInTheDocument();
     expect(fetchRooms).toHaveBeenCalledTimes(1);
   });
 

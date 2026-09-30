@@ -38,6 +38,8 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   const load = useCallback(async (s: RoomStatus) => {
     setLoading(true);
@@ -72,9 +74,6 @@ export default function ChatList({ selectedRoomId, onSelect }: ChatListProps) {
     else setStatus(room.status);
     onSelect(room);
   };
-
-  const [claimingId, setClaimingId] = useState<string | null>(null);
-  const [claimError, setClaimError] = useState<string | null>(null);
 
   const handleClaim = async (room: Room) => {
     setClaimingId(room.id);
