@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"cloud.google.com/go/firestore"
@@ -31,7 +32,7 @@ func (s *FirestoreNoteStore) RoomExists(ctx context.Context, roomID string) (boo
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("get room %s: %w", roomID, err)
 	}
 	return true, nil
 }
@@ -39,7 +40,7 @@ func (s *FirestoreNoteStore) RoomExists(ctx context.Context, roomID string) (boo
 func (s *FirestoreNoteStore) AddNote(ctx context.Context, roomID string, note Note) (Note, error) {
 	ref, _, err := s.notes(roomID).Add(ctx, note)
 	if err != nil {
-		return Note{}, err
+		return Note{}, fmt.Errorf("add note to room %s: %w", roomID, err)
 	}
 	note.ID = ref.ID
 	return note, nil
@@ -55,7 +56,7 @@ func (s *FirestoreNoteStore) ListNotes(ctx context.Context, roomID string) ([]No
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("list notes in room %s: %w", roomID, err)
 		}
 		var note Note
 		if err := doc.DataTo(&note); err != nil {
