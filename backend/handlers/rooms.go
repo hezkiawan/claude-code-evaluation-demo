@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -26,6 +27,11 @@ type Room struct {
 	Platform  string    `json:"platform" firestore:"platform"`
 	Status    string    `json:"status" firestore:"status"`
 	CreatedAt time.Time `json:"createdAt" firestore:"createdAt"`
+
+	// Claim audit fields, set once by POST /api/rooms/{id}/claim.
+	AssignedAgent string     `json:"assignedAgent,omitempty" firestore:"assignedAgent,omitempty"`
+	ClaimedAt     *time.Time `json:"claimedAt,omitempty" firestore:"claimedAt,omitempty"`
+	SLABreached   bool       `json:"slaBreached,omitempty" firestore:"slaBreached,omitempty"`
 }
 
 type createRoomRequest struct {
@@ -35,10 +41,14 @@ type createRoomRequest struct {
 
 type RoomHandler struct {
 	fs *firestore.Client
+	// claimRoom is swappable so the HTTP layer can be tested without Firestore.
+	claimRoom func(ctx context.Context, id, agentName string) (Room, error)
 }
 
 func NewRoomHandler(fs *firestore.Client) *RoomHandler {
-	return &RoomHandler{fs: fs}
+	h := &RoomHandler{fs: fs}
+	h.claimRoom = h.claimInFirestore
+	return h
 }
 
 // Create handles POST /api/rooms.
